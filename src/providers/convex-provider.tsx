@@ -11,9 +11,9 @@ const convex = new ConvexReactClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
  * Place this inside the ThemeProvider in the root layout.
  */
 export function ConvexClientProvider({ children }: { children: ReactNode }) {
-  return (
-    <ConvexAuthNextjsProvider client={convex}>
-      {children}
-    </ConvexAuthNextjsProvider>
-  );
+    return (
+        <ConvexAuthNextjsProvider client={convex}>
+            {children}
+        </ConvexAuthNextjsProvider>
+    );
 }

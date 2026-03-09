@@ -16,7 +16,7 @@ export default function Page() {
         <SectionHeader>
           <SectionTitle>General</SectionTitle>
           <SectionDescription>
-            Manage your organisation settings and team members.
+            Manage your organization settings and team members.
           </SectionDescription>
         </SectionHeader>
         <FormCardGroup>

@@ -7,9 +7,9 @@ import type { MutationCtx, QueryCtx } from "./_generated/server";
  * Returns the authenticated userId or throws a 401-equivalent error.
  */
 export async function requireAuth(ctx: QueryCtx | MutationCtx) {
-  const userId = await getAuthUserId(ctx);
-  if (!userId) throw new ConvexError("Not authenticated");
-  return userId;
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new ConvexError("Not authenticated");
+    return userId;
 }
 
 /**
@@ -17,15 +17,15 @@ export async function requireAuth(ctx: QueryCtx | MutationCtx) {
  * Throws if the user has no org membership.
  */
 export async function requireUserOrg(
-  ctx: QueryCtx | MutationCtx,
-  userId: Id<"users">
+    ctx: QueryCtx | MutationCtx,
+    userId: Id<"users">
 ) {
-  const membership = await ctx.db
-    .query("members")
-    .withIndex("by_user", (q) => q.eq("userId", userId))
-    .first();
-  if (!membership) throw new ConvexError("User is not a member of any organisation");
-  return membership;
+    const membership = await ctx.db
+        .query("members")
+        .withIndex("by_user", (q) => q.eq("userId", userId))
+        .first();
+    if (!membership) throw new ConvexError("User is not a member of any organisation");
+    return membership;
 }
 
 /**
@@ -33,18 +33,18 @@ export async function requireUserOrg(
  * Throws if not a member.
  */
 export async function requireMembership(
-  ctx: QueryCtx | MutationCtx,
-  userId: Id<"users">,
-  orgId: Id<"organizations">
+    ctx: QueryCtx | MutationCtx,
+    userId: Id<"users">,
+    orgId: Id<"organizations">
 ) {
-  const membership = await ctx.db
-    .query("members")
-    .withIndex("by_user_org", (q) =>
-      q.eq("userId", userId).eq("orgId", orgId)
-    )
-    .unique();
-  if (!membership) throw new ConvexError("Access denied");
-  return membership;
+    const membership = await ctx.db
+        .query("members")
+        .withIndex("by_user_org", (q) =>
+            q.eq("userId", userId).eq("orgId", orgId)
+        )
+        .unique();
+    if (!membership) throw new ConvexError("Access denied");
+    return membership;
 }
 
 /**
@@ -52,12 +52,12 @@ export async function requireMembership(
  * Throws if not a member or not an admin.
  */
 export async function requireAdmin(
-  ctx: QueryCtx | MutationCtx,
-  userId: Id<"users">,
-  orgId: Id<"organizations">
+    ctx: QueryCtx | MutationCtx,
+    userId: Id<"users">,
+    orgId: Id<"organizations">
 ) {
-  const membership = await requireMembership(ctx, userId, orgId);
-  if (membership.role !== "admin")
-    throw new ConvexError("Admin role required");
-  return membership;
+    const membership = await requireMembership(ctx, userId, orgId);
+    if (membership.role !== "admin")
+        throw new ConvexError("Admin role required");
+    return membership;
 }

@@ -29,8 +29,6 @@ export const metadata: Metadata = {
   },
 };
 
-export const dynamic = "error";
-
 export default function RootLayout({
   children,
 }: Readonly<{

@@ -1,0 +1,26 @@
+[phases.setup]
+nixPkgs = ["nodePackages.nodejs", "pnpm"]
+aptPkgs = ["libvips-dev"] # Necessary if using Next.js Image Optimization with sharp
+nixpkgsArchive = '51ad838b03a05b1de6f9f2a0fffecee64a9788ee' # Node 22.13.1
+
+[phases.install]
+cmds = ["npm install -g corepack", "corepack enable", "corepack prepare pnpm@10.11.0 --activate", "pnpm install"]
+
+[phases.build]
+cmds = ["pnpm run build"]
+cacheDirectories = [
+  ".next/cache",
+  "node_modules/.cache",
+  ".turbo"
+]
+
+[start]
+cmd = "pnpm run start"
+
+[variables]
+NIXPACKS_NODE_VERSION="22"
+NODE_ENV = "production"
+NEXT_TELEMETRY_DISABLED = "1"
+NEXT_BUILD_TURBOPACK = "1"
+PORT = "3000"
+HOSTNAME = "0.0.0.0"
