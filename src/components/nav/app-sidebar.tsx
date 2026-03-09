@@ -1,6 +1,6 @@
 "use client";
 
-import { Activity, Bell, Cog, LayoutGrid, PanelTop } from "lucide-react";
+import { Activity, Bell, Cog, LayoutGrid, PanelTop, Users } from "lucide-react";
 import * as React from "react";
 import { Kbd } from "@/components/common/kbd";
 import { NavMonitors } from "@/components/nav/nav-monitors";
@@ -102,6 +102,11 @@ const data = {
       name: "Notifiers",
       url: "/dashboard/notifiers",
       icon: Bell,
+    },
+    {
+      name: "Employees",
+      url: "/dashboard/employees",
+      icon: Users,
     },
     {
       name: "Settings",

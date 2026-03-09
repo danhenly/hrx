@@ -53,4 +53,45 @@ export default defineSchema({
         .index("by_org", ["orgId"])
         .index("by_email", ["email"])
         .index("by_email_org", ["email", "orgId"]),
+
+    // ─── HR: Employee Management ───────────────────────────────────────────
+
+    /**
+     * Employees — workforce records managed within the tenant.
+     * Deliberately separate from `users` (who log in to the app).
+     */
+    employees: defineTable({
+        orgId: v.id("organizations"),
+        firstName: v.string(),
+        lastName: v.string(),
+        email: v.optional(v.string()),
+        phone: v.optional(v.string()),
+        dateOfBirth: v.optional(v.number()),   // Unix ms
+        hireDate: v.number(),                  // Unix ms
+        status: v.union(
+            v.literal("active"),
+            v.literal("terminated"),
+            v.literal("on_leave"),
+        ),
+    })
+        .index("by_org", ["orgId"])
+        .index("by_org_status", ["orgId", "status"]),
+
+    /**
+     * Employee Positions — immutable history of titles, departments & salaries.
+     * The "current" position is the row with no endDate (or the most-recent one).
+     */
+    employeePositions: defineTable({
+        orgId: v.id("organizations"),        // denormalised for easier scoping queries
+        employeeId: v.id("employees"),
+        jobTitle: v.string(),
+        department: v.optional(v.string()),
+        salary: v.optional(v.number()),      // gross annual, base currency units
+        effectiveDate: v.number(),           // Unix ms — when this position started
+        endDate: v.optional(v.number()),     // Unix ms — null / absent = still current
+        notes: v.optional(v.string()),
+    })
+        .index("by_employee", ["employeeId"])
+        .index("by_org", ["orgId"])
+        .index("by_employee_effective", ["employeeId", "effectiveDate"]),
 });

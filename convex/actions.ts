@@ -3,13 +3,14 @@
  * We use bcryptjs (pure JS, no native binaries) for all hashing/verification —
  * the same library used by the Password provider in auth.ts.
  */
+
+import { getAuthUserId } from "@convex-dev/auth/server";
 import bcrypt from "bcryptjs";
 import { ConvexError, v } from "convex/values";
-import { action, type ActionCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
-import { getAuthUserId } from "@convex-dev/auth/server";
-import { roleValidator } from "./schema";
 import type { Id } from "./_generated/dataModel";
+import { type ActionCtx, action } from "./_generated/server";
+import { roleValidator } from "./schema";
 
 const SALT_ROUNDS = 12;
 
