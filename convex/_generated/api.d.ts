@@ -15,6 +15,8 @@ import type * as helpers from "../helpers.js";
 import type * as http from "../http.js";
 import type * as invitations from "../invitations.js";
 import type * as organizations from "../organizations.js";
+import type * as timeEntries from "../timeEntries.js";
+import type * as timesheets from "../timesheets.js";
 import type * as users from "../users.js";
 
 import type {
@@ -31,6 +33,8 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   invitations: typeof invitations;
   organizations: typeof organizations;
+  timeEntries: typeof timeEntries;
+  timesheets: typeof timesheets;
   users: typeof users;
 }>;
 

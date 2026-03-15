@@ -160,6 +160,12 @@ The `api` object must be imported with a **relative path** from the file — not
 
 Located at `src/middleware.ts`. Protected routes redirect to `/sign-in`. Authenticated users on `/sign-in` or `/sign-up` redirect to `/dashboard`. To add a new public route, add it to the `isPublicRoute` matcher array.
 
+### Dashboard layout requirements
+
+- Every module/page under `src/app/dashboard/` must reuse the shell/layout, spacing, and typography conventions from the template so the dashboard feels cohesive.
+- Use `SectionGroup` → `Section` → `SectionHeader` to wrap the page heading. Keep the title and description on the left and place any primary/new-record CTA on the right of that header. Breadcrumbs are optional; when present, include them inside the same `SectionHeader` block.
+- If a sticky header is needed to keep actions visible while scrolling, apply the sticky styles to the `SectionHeader` itself; do not wrap it in a custom container.
+
 ---
 
 ## UI Component Conventions

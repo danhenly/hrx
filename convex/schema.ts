@@ -94,4 +94,62 @@ export default defineSchema({
         .index("by_employee", ["employeeId"])
         .index("by_org", ["orgId"])
         .index("by_employee_effective", ["employeeId", "effectiveDate"]),
+
+    // ─── Timekeeping ────────────────────────────────────────────────────────
+
+    /**
+     * Timesheets — weekly submission per employee.
+     */
+    timesheets: defineTable({
+        orgId: v.id("organizations"),
+        employeeId: v.id("employees"),
+        weekStart: v.number(), // Unix ms start-of-week
+        status: v.union(
+            v.literal("open"),
+            v.literal("submitted"),
+            v.literal("approved"),
+            v.literal("rejected"),
+            v.literal("locked"),
+        ),
+        submittedAt: v.optional(v.number()),
+        approvedAt: v.optional(v.number()),
+        approvedBy: v.optional(v.id("users")),
+        rejectedReason: v.optional(v.string()),
+        totalMinutes: v.optional(v.number()),
+    })
+        .index("by_org", ["orgId"])
+        .index("by_org_employee", ["orgId", "employeeId"])
+        .index("by_org_week", ["orgId", "weekStart"]),
+
+    /**
+     * Time entries — per employee per day with up to 3 intervals.
+     */
+    timeEntries: defineTable({
+        orgId: v.id("organizations"),
+        employeeId: v.id("employees"),
+        date: v.number(), // Unix ms (start-of-day)
+        intervals: v.array(
+            v.object({
+                start: v.number(), // Unix ms
+                end: v.number(),   // Unix ms (can cross midnight, counted on start date)
+                durationMinutes: v.number(),
+            }),
+        ),
+        totalMinutes: v.number(),
+        notes: v.optional(v.string()),
+        source: v.literal("manual"),
+        status: v.union(
+            v.literal("draft"),
+            v.literal("submitted"),
+            v.literal("approved"),
+            v.literal("rejected"),
+        ),
+        rejectedReason: v.optional(v.string()),
+        timesheetId: v.optional(v.id("timesheets")),
+        createdBy: v.id("users"),
+        updatedBy: v.id("users"),
+    })
+        .index("by_org", ["orgId"])
+        .index("by_org_employee_date", ["orgId", "employeeId", "date"])
+        .index("by_org_date", ["orgId", "date"]),
 });
