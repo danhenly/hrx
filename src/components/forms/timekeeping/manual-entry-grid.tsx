@@ -148,9 +148,10 @@ export function ManualEntryGrid({
             toast.error("Save the entry before submitting");
             return;
         }
+        const entryId = row.entryId;
         startTransition(async () => {
             try {
-                await submitEntry({ entryId: row.entryId });
+                await submitEntry({ entryId });
                 toast.success("Entry submitted");
             } catch (err) {
                 toast.error((err as Error).message ?? "Failed to submit entry");
@@ -163,9 +164,10 @@ export function ManualEntryGrid({
             removeRow(row.localId);
             return;
         }
+        const entryId = row.entryId;
         startTransition(async () => {
             try {
-                await deleteDraft({ entryId: row.entryId as Id<"timeEntries"> });
+                await deleteDraft({ entryId });
                 toast.success("Draft deleted");
             } catch (err) {
                 toast.error((err as Error).message ?? "Failed to delete entry");
