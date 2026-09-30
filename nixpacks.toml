@@ -1,6 +1,6 @@
 [phases.setup]
 nixPkgs = ["nodePackages.nodejs", "pnpm"]
-aptPkgs = ["libvips-dev"] # Necessary if using Next.js Image Optimization with sharp
+# aptPkgs = ["libvips-dev"] # Necessary if using Next.js Image Optimization with sharp
 nixpkgsArchive = '51ad838b03a05b1de6f9f2a0fffecee64a9788ee' # Node 22.13.1
 
 [phases.install]
