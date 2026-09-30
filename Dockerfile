@@ -11,6 +11,7 @@ WORKDIR /app
 COPY package.json pnpm-lock.yaml ./
 RUN --mount=type=cache,target=/root/.local/share/pnpm/store pnpm install --frozen-lockfile
 COPY . ./
+RUN npx convex codegen
 RUN pnpm exec next build
 EXPOSE 3000
 CMD ["pnpm", "start"]
