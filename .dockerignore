@@ -2,4 +2,3 @@ node_modules
 .next
 out
 .git
-convex/_generated
