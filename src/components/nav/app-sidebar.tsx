@@ -1,11 +1,9 @@
 "use client";
 
-import { Activity, Bell, Clock, Cog, LayoutGrid, PanelTop, Users } from "lucide-react";
+import { Clock, Cog, Users } from "lucide-react";
 import * as React from "react";
 import { Kbd } from "@/components/common/kbd";
-import { NavMonitors } from "@/components/nav/nav-monitors";
 import { NavOverview } from "@/components/nav/nav-overview";
-import { NavStatusPages } from "@/components/nav/nav-status-pages";
 import { NavUser } from "@/components/nav/nav-user";
 import { OrganizationSwitcher } from "@/components/nav/organization-switcher";
 import {
@@ -23,14 +21,12 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { monitors } from "@/data/monitors";
-import { statusPages } from "@/data/status-pages";
-import { NavChecklist } from "./nav-checklist";
 import { NavHelp } from "./nav-help";
 
 const SIDEBAR_KEYBOARD_SHORTCUT = "[";
 
-// This is sample data.
+// TODO: replace with the signed-in user's organizations (api.organizations.getMyOrg).
+// The template's slug/plan fields do not exist in the Convex schema.
 const data = {
   orgs: [
     {
@@ -44,65 +40,7 @@ const data = {
       plan: "Starter",
     },
   ],
-  monitors: [
-    {
-      name: "OpenStatus Marketing",
-      url: "/dashboard/monitors/overview",
-      tags: ["Production"],
-    },
-    {
-      name: "OpenStatus API",
-      url: "/dashboard/monitors/overview",
-      tags: ["Production"],
-    },
-    {
-      name: "OpenStatus Dashboard",
-      url: "/dashboard/monitors/overview",
-      tags: ["Production"],
-    },
-    {
-      name: "Lightweight OS",
-      url: "/dashboard/monitors/overview",
-      tags: ["Development"],
-    },
-    {
-      name: "Astro Status Page",
-      url: "/dashboard/monitors/overview",
-      tags: ["Development"],
-    },
-    {
-      name: "Vercel Edge Ping",
-      url: "/dashboard/monitors/overview",
-      tags: ["Staging"],
-    },
-  ],
-  statusPages: [
-    {
-      name: "OpenStatus Status",
-      url: "/dashboard/status-pages/status-reports",
-    },
-  ],
   overview: [
-    {
-      name: "Overview",
-      url: "/dashboard/overview",
-      icon: LayoutGrid,
-    },
-    {
-      name: "Monitors",
-      url: "/dashboard/monitors",
-      icon: Activity,
-    },
-    {
-      name: "Status Pages",
-      url: "/dashboard/status-pages",
-      icon: PanelTop,
-    },
-    {
-      name: "Notifiers",
-      url: "/dashboard/notifiers",
-      icon: Bell,
-    },
     {
       name: "Time",
       url: "/dashboard/time",
@@ -129,12 +67,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarHeader>
       <SidebarContent>
         <NavOverview items={data.overview} />
-        {/* NOTE: replacing data.monitors data.statusPages */}
-        <NavStatusPages statusPages={statusPages} />
-        <NavMonitors monitors={monitors} />
-        <div className="mt-auto px-2">
-          <NavChecklist />
-        </div>
         <NavHelp />
       </SidebarContent>
       <SidebarFooter className="border-t">
@@ -148,13 +80,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 export function AppSidebarTrigger() {
   const { toggleSidebar } = useSidebar();
 
-  // Adds a keyboard shortcut to toggle the sidebar.
+  // Adds a keyboard shortcut to toggle the sidebar
   React.useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (
-        event.key === SIDEBAR_KEYBOARD_SHORTCUT &&
-        (event.metaKey || event.ctrlKey)
-      ) {
+      if (event.key === SIDEBAR_KEYBOARD_SHORTCUT && (event.metaKey || event.ctrlKey)) {
         event.preventDefault();
         toggleSidebar();
       }
