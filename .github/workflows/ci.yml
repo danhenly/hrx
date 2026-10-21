@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Typecheck and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+      NEXT_PUBLIC_CONVEX_URL: ${{ secrets.NEXT_PUBLIC_CONVEX_URL }}
+      NEXT_PUBLIC_CONVEX_SITE_URL: ${{ secrets.NEXT_PUBLIC_CONVEX_SITE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enable pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.11.0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check required build env
+        run: |
+          if [ -z "${NEXT_PUBLIC_CONVEX_URL}" ]; then
+            echo "::error::Repository secret NEXT_PUBLIC_CONVEX_URL is not set; ConvexReactClient throws without it at build time."
+            exit 1
+          fi
+
+      - name: Typecheck
+        run: pnpm exec tsc --noEmit
+
+      - name: Lint (informational)
+        continue-on-error: true
+        run: pnpm exec biome lint .
+
+      - name: Build
+        run: pnpm exec next build
