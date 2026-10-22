@@ -1,5 +1,6 @@
 import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { logAudit } from "./audit";
 import { requireAdmin, requireAuth, requireMembership } from "./helpers";
 
 const intervalInput = v.object({
@@ -145,6 +146,14 @@ export const approve = mutation({
             throw new ConvexError("Only submitted entries can be approved");
         }
         await ctx.db.patch(entryId, { status: "approved", updatedBy: userId, rejectedReason: undefined });
+
+        await logAudit(ctx, {
+            orgId: entry.orgId,
+            actorId: userId,
+            action: "timeEntry.approve",
+            entityType: "timeEntries",
+            entityId: entryId,
+        });
     },
 });
 
@@ -162,6 +171,14 @@ export const reject = mutation({
             status: "rejected",
             rejectedReason: reason,
             updatedBy: userId,
+        });
+
+        await logAudit(ctx, {
+            orgId: entry.orgId,
+            actorId: userId,
+            action: "timeEntry.reject",
+            entityType: "timeEntries",
+            entityId: entryId,
         });
     },
 });

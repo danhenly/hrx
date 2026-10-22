@@ -25,6 +25,11 @@ const settings = [
     description: "Manage your account information.",
     href: "/dashboard/settings/account",
   },
+  {
+    title: "Audit log",
+    description: "View the trail of membership and approval changes.",
+    href: "/dashboard/settings/audit",
+  },
 ];
 export default function Page() {
   return (

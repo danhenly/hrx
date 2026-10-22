@@ -152,4 +152,22 @@ export default defineSchema({
         .index("by_org", ["orgId"])
         .index("by_org_employee_date", ["orgId", "employeeId", "date"])
         .index("by_org_date", ["orgId", "date"]),
+
+    // ─── Audit ──────────────────────────────────────────────────────────────
+
+    /**
+     * Audit logs — append-only trail of who did what, when, in which org.
+     * Written inside the mutation that performs the change (same
+     * transaction), never from an action. No update/delete functions are
+     * exported.
+     */
+    auditLogs: defineTable({
+        orgId: v.id("organizations"),
+        actorId: v.id("users"),
+        action: v.string(), // e.g. "employee.create", "timesheet.approve"
+        entity: v.object({ type: v.string(), id: v.string() }),
+        at: v.number(), // Unix ms
+    })
+        .index("by_org_at", ["orgId", "at"])
+        .index("by_org_entity", ["orgId", "entity.type", "entity.id"]),
 });

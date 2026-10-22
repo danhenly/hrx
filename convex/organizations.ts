@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { logAudit } from "./audit";
 import {
     listUserMemberships,
     requireAdmin,
@@ -61,5 +62,13 @@ export const updateOrg = mutation({
         const userId = await requireAuth(ctx);
         await requireAdmin(ctx, userId, orgId);
         await ctx.db.patch(orgId, fields);
+
+        await logAudit(ctx, {
+            orgId,
+            actorId: userId,
+            action: "org.update",
+            entityType: "organizations",
+            entityId: orgId,
+        });
     },
 });
