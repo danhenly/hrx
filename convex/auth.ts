@@ -1,6 +1,8 @@
 import { Password } from "@convex-dev/auth/providers/Password";
 import { convexAuth } from "@convex-dev/auth/server";
 import bcrypt from "bcryptjs";
+import type { DataModel } from "./_generated/dataModel";
+import type { GenericDatabaseReader } from "convex/server";
 
 const SALT_ROUNDS = 12;
 
@@ -49,18 +51,20 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
 
             // Only auto-create an org for standalone sign-ups, not for invited users.
             // A pending invitation for this email means the user is joining an existing org.
+            // Scoped to this email via by_email — no table scan. `acceptedAt` is optional,
+            // so filter in JS: Convex index ranges can't express "field is absent".
+            // (by_email_org is unusable here — orgId is unknown at sign-up.)
             const email = args.profile.email;
+            // The callback's ctx is typed against the generic (unparameterized)
+            // data model, so index names collapse to `never` — narrow the db
+            // handle to this repo's DataModel for the indexed read.
+            const db = ctx.db as GenericDatabaseReader<DataModel>;
             const pendingInvitation = email
-                ? (await ctx.db
+                ? ((await db
                     .query("invitations")
-                    .filter((q) =>
-                        q.and(
-                            q.eq(q.field("email"), email),
-                            q.gt(q.field("expiresAt"), Date.now())
-                        )
-                    )
+                    .withIndex("by_email", (q) => q.eq("email", email))
                     .collect()
-                ).find((inv) => inv.acceptedAt === undefined) ?? null
+                ).find((inv) => inv.acceptedAt === undefined && inv.expiresAt > Date.now()) ?? null)
                 : null;
 
             const isInvited = Boolean(pendingInvitation);
