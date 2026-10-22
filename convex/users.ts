@@ -1,6 +1,7 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError, v } from "convex/values";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import { logAudit } from "./audit";
 import { requireAdmin, requireAuth, requireMembership } from "./helpers";
 import { roleValidator } from "./schema";
 
@@ -58,6 +59,14 @@ export const removeMember = mutation({
         if (target.userId === userId)
             throw new ConvexError("Cannot remove yourself");
         await ctx.db.delete(memberId);
+
+        await logAudit(ctx, {
+            orgId: target.orgId,
+            actorId: userId,
+            action: "member.remove",
+            entityType: "members",
+            entityId: memberId,
+        });
     },
 });
 
@@ -72,6 +81,14 @@ export const updateMemberRole = mutation({
         if (!target) throw new ConvexError("Member not found");
         await requireAdmin(ctx, userId, target.orgId);
         await ctx.db.patch(memberId, { role });
+
+        await logAudit(ctx, {
+            orgId: target.orgId,
+            actorId: userId,
+            action: "member.role_change",
+            entityType: "members",
+            entityId: memberId,
+        });
     },
 });
 
