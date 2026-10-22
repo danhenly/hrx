@@ -1,5 +1,6 @@
 import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { logAudit } from "./audit";
 import { requireAdmin, requireAuth, requireMembership } from "./helpers";
 import { roleValidator } from "./schema";
 
@@ -83,6 +84,14 @@ export const create = mutation({
             expiresAt: Date.now() + INVITE_EXPIRY_MS,
         });
 
+        await logAudit(ctx, {
+            orgId,
+            actorId: userId,
+            action: "invitation.create",
+            entityType: "invitations",
+            entityId: invitationId,
+        });
+
         return { invitationId, token };
     },
 });
@@ -131,6 +140,14 @@ export const accept = mutation({
         // Mark invitation as accepted
         await ctx.db.patch(invitation._id, { acceptedAt: Date.now() });
 
+        await logAudit(ctx, {
+            orgId: invitation.orgId,
+            actorId: userId,
+            action: "invitation.accept",
+            entityType: "invitations",
+            entityId: invitation._id,
+        });
+
         return { orgId: invitation.orgId };
     },
 });
@@ -146,5 +163,13 @@ export const revoke = mutation({
         if (!invitation) throw new ConvexError("Invitation not found");
         await requireAdmin(ctx, userId, invitation.orgId);
         await ctx.db.delete(invitationId);
+
+        await logAudit(ctx, {
+            orgId: invitation.orgId,
+            actorId: userId,
+            action: "invitation.revoke",
+            entityType: "invitations",
+            entityId: invitationId,
+        });
     },
 });

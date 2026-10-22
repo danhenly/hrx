@@ -1,5 +1,6 @@
 import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { logAudit } from "./audit";
 import { requireAdmin, requireAuth, requireMembership } from "./helpers";
 
 async function assertEmployeeOrg(ctx: any, orgId: any, employeeId: any) {
@@ -101,6 +102,14 @@ export const approve = mutation({
             approvedBy: userId,
             rejectedReason: undefined,
         });
+
+        await logAudit(ctx, {
+            orgId: timesheet.orgId,
+            actorId: userId,
+            action: "timesheet.approve",
+            entityType: "timesheets",
+            entityId: timesheetId,
+        });
     },
 });
 
@@ -117,6 +126,14 @@ export const reject = mutation({
         await ctx.db.patch(timesheetId, {
             status: "rejected",
             rejectedReason: reason,
+        });
+
+        await logAudit(ctx, {
+            orgId: timesheet.orgId,
+            actorId: userId,
+            action: "timesheet.reject",
+            entityType: "timesheets",
+            entityId: timesheetId,
         });
     },
 });
