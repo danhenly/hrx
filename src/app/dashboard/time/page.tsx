@@ -6,7 +6,6 @@ import { useMemo } from "react";
 import { useQuery } from "convex/react";
 import {
     Section,
-    SectionDescription,
     SectionGroup,
     SectionHeader,
     SectionTitle,

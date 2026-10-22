@@ -1,5 +1,4 @@
 import { fetchQuery } from "convex/nextjs";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { FormSignUp } from "@/components/forms/auth/form-sign-up";
 import {

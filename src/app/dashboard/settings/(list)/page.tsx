@@ -21,11 +21,6 @@ const settings = [
     href: "/dashboard/settings/general",
   },
   {
-    title: "Billing",
-    description: "Manage your billing information and payment methods.",
-    href: "/dashboard/settings/billing",
-  },
-  {
     title: "Account",
     description: "Manage your account information.",
     href: "/dashboard/settings/account",
