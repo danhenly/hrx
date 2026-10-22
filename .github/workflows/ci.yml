@@ -51,7 +51,13 @@ jobs:
         run: pnpm exec biome lint .
 
       - name: Convex generated code is fresh
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
         run: |
+          if [ -z "$CONVEX_DEPLOY_KEY" ]; then
+            echo "::warning::CONVEX_DEPLOY_KEY not set — skipping codegen freshness check"
+            exit 0
+          fi
           pnpm exec convex codegen --typecheck disable
           git diff --exit-code -- convex/_generated
 
