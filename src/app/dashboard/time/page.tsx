@@ -17,6 +17,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { Employee } from "@/data/employees";
 import type { Timesheet } from "@/data/timekeeping";
 import { api } from "../../../../convex/_generated/api";
+import { useActiveOrg } from "@/providers/org-provider";
 
 const STATUS_SUMMARY = [
   {
@@ -37,8 +38,7 @@ const STATUS_SUMMARY = [
 ];
 
 export default function TimePage() {
-  const org = useQuery(api.organizations.getMyOrg);
-  const orgId = org?._id;
+  const { orgId } = useActiveOrg();
 
   const timesheets = useQuery(
     api.timesheets.listForOrg,

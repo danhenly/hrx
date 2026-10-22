@@ -1,8 +1,6 @@
 "use client";
 
 import { Building, ChevronsUpDown, Plus } from "lucide-react";
-import * as React from "react";
-
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,21 +15,29 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { useActiveOrg } from "@/providers/org-provider";
 import { Link } from "../common/link";
 
-export function OrganizationSwitcher({
-  orgs,
-}: {
-  orgs: {
-    name: string;
-    slug: string;
-    plan: string;
-  }[];
-}) {
+export function OrganizationSwitcher() {
   const { isMobile, setOpenMobile } = useSidebar();
-  const [activeTeam, setActiveTeam] = React.useState(orgs[0]);
+  const { orgs, active, setActiveOrg } = useActiveOrg();
 
-  if (!activeTeam) {
+  if (active === undefined || !active) {
+    // No orgs yet (zero-org notice covers the shell) or still loading.
+    if (active === undefined) {
+      return (
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton size="lg" disabled>
+              <div className="flex aspect-square size-8 animate-pulse items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
+                <Building className="size-4" />
+              </div>
+              <span className="text-muted-foreground text-sm">Loading…</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      );
+    }
     return null;
   }
 
@@ -48,8 +54,10 @@ export function OrganizationSwitcher({
                 <Building className="size-4" />
               </div>
               <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-medium">{activeTeam.name}</span>
-                <span className="truncate text-xs">{activeTeam.plan}</span>
+                <span className="truncate font-medium">{active.name}</span>
+                <span className="truncate text-xs capitalize">
+                  {active.role}
+                </span>
               </div>
               <ChevronsUpDown className="ml-auto" />
             </SidebarMenuButton>
@@ -63,18 +71,18 @@ export function OrganizationSwitcher({
             <DropdownMenuLabel className="text-muted-foreground text-xs">
               Organizations
             </DropdownMenuLabel>
-            {orgs.map((org) => (
+            {orgs?.map((org) => (
               <DropdownMenuItem
-                key={org.name}
+                key={org.orgId}
                 onClick={() => {
-                  setActiveTeam(org);
+                  setActiveOrg(org.orgId);
                   setOpenMobile(false);
                 }}
                 className="gap-2 p-2"
               >
                 <span>{org.name}</span>
-                <span className="font-mono text-muted-foreground text-xs">
-                  {org.slug}
+                <span className="ml-auto font-mono text-muted-foreground text-xs">
+                  {org.role}
                 </span>
               </DropdownMenuItem>
             ))}
@@ -85,7 +93,7 @@ export function OrganizationSwitcher({
                   <Plus className="size-4" />
                 </div>
                 <div className="font-medium text-muted-foreground">
-                  Add team member
+                  Manage members
                 </div>
               </Link>
             </DropdownMenuItem>

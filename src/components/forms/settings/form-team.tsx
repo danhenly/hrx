@@ -44,6 +44,7 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api } from "../../../../convex/_generated/api";
+import { useActiveOrg } from "@/providers/org-provider";
 
 // ─── Invite schema ────────────────────────────────────────────────────────────
 const inviteSchema = z.object({
@@ -64,8 +65,7 @@ type DirectValues = z.infer<typeof directSchema>;
 export function FormTeam() {
   const me = useQuery(api.users.getMe);
   const isAdmin = me?.membership?.role === "admin";
-  const org = useQuery(api.organizations.getMyOrg);
-  const orgId = org?._id;
+  const { orgId } = useActiveOrg();
   const members = useQuery(api.users.listMembers, orgId ? { orgId } : "skip");
   const invitations = useQuery(
     api.invitations.listByOrg,

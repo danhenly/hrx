@@ -13,19 +13,17 @@ export async function requireAuth(ctx: QueryCtx | MutationCtx) {
 }
 
 /**
- * Resolves the primary organisation for a user (first membership found).
- * Throws if the user has no org membership.
+ * All memberships for a user, one per org they belong to.
+ * Never leaks other users' rows.
  */
-export async function requireUserOrg(
+export async function listUserMemberships(
     ctx: QueryCtx | MutationCtx,
     userId: Id<"users">
 ) {
-    const membership = await ctx.db
+    return ctx.db
         .query("members")
         .withIndex("by_user", (q) => q.eq("userId", userId))
-        .first();
-    if (!membership) throw new ConvexError("User is not a member of any organisation");
-    return membership;
+        .collect();
 }
 
 /**

@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { api } from "../../../../convex/_generated/api";
+import { useActiveOrg } from "@/providers/org-provider";
 
 const schema = z.object({
   name: z.string().min(1, "Organization name is required"),
@@ -39,7 +40,8 @@ type FormValues = z.infer<typeof schema>;
 export function FormOrganization() {
   const me = useQuery(api.users.getMe);
   const isAdmin = me?.membership?.role === "admin";
-  const org = useQuery(api.organizations.getMyOrg);
+  const { orgId } = useActiveOrg();
+  const org = useQuery(api.organizations.getOrg, orgId ? { orgId } : "skip");
   const updateOrg = useMutation(api.organizations.updateOrg);
   const [isPending, startTransition] = useTransition();
   const form = useForm<FormValues>({
@@ -54,10 +56,10 @@ export function FormOrganization() {
   });
 
   function onSubmit(values: FormValues) {
-    if (isPending || !org?._id) return;
+    if (isPending || !orgId) return;
     startTransition(async () => {
       try {
-        await updateOrg({ orgId: org._id, ...values });
+        await updateOrg({ orgId, ...values });
         toast.success("Organization details saved");
       } catch (err) {
         toast.error((err as Error).message ?? "Failed to save");

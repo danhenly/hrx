@@ -18,10 +18,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { Employee } from "@/data/employees";
 import type { TimeEntry } from "@/data/timekeeping";
 import { api } from "../../../../../convex/_generated/api";
+import { useActiveOrg } from "@/providers/org-provider";
 
 export default function TimeEntriesPage() {
-    const org = useQuery(api.organizations.getMyOrg);
-    const orgId = org?._id;
+    const { orgId } = useActiveOrg();
 
     const [anchorDate, setAnchorDate] = useState<Date>(() => new Date());
 
