@@ -1,15 +1,13 @@
 "use client";
 
-import { useQuery } from "convex/react";
 import { UserPlus } from "lucide-react";
 import { useState } from "react";
 import { AddEmployeeSheet } from "@/components/forms/employees/employee-sheet";
 import { Button } from "@/components/ui/button";
-import { api } from "../../../../convex/_generated/api";
+import { useActiveOrg } from "@/providers/org-provider";
 
 export function NavActions() {
-    const org = useQuery(api.organizations.getMyOrg);
-    const orgId = org?._id;
+    const { orgId } = useActiveOrg();
     const [open, setOpen] = useState(false);
 
     return (

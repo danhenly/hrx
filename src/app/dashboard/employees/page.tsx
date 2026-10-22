@@ -14,12 +14,12 @@ import { EditEmployeeSheet } from "@/components/forms/employees/employee-sheet";
 import { FormCard, FormCardContent } from "@/components/forms/form-card";
 import type { EmployeeWithPosition } from "@/data/employees";
 import { api } from "../../../../convex/_generated/api";
+import { useActiveOrg } from "@/providers/org-provider";
 import type { Id } from "../../../../convex/_generated/dataModel";
 
 export default function EmployeesPage() {
     const me = useQuery(api.users.getMe);
-    const org = useQuery(api.organizations.getMyOrg);
-    const orgId = org?._id;
+    const { orgId } = useActiveOrg();
 
     const employees = useQuery(api.employees.list, orgId ? { orgId } : "skip") as
         | EmployeeWithPosition[]

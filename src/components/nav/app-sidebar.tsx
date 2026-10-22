@@ -24,21 +24,7 @@ import {
 
 const SIDEBAR_KEYBOARD_SHORTCUT = "[";
 
-// TODO: replace with the signed-in user's organizations (api.organizations.getMyOrg).
-// The template's slug/plan fields do not exist in the Convex schema.
 const data = {
-  orgs: [
-    {
-      name: "OpenStatus",
-      slug: "easy-peasy",
-      plan: "Hobby",
-    },
-    {
-      name: "Acme Corp.",
-      slug: "acme-corp",
-      plan: "Starter",
-    },
-  ],
   overview: [
     {
       name: "Time",
@@ -62,7 +48,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   return (
     <Sidebar collapsible="icon" {...props}>
       <SidebarHeader className="flex h-14 justify-center border-b py-1">
-        <OrganizationSwitcher orgs={data.orgs} />
+        <OrganizationSwitcher />
       </SidebarHeader>
       <SidebarContent>
         <NavOverview items={data.overview} />
