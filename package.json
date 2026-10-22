@@ -4,10 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
-    "build": "next build && shadcn build -o 'out/r'",
+    "build": "next build",
     "start": "next start",
     "tsc": "tsc --noEmit",
-    "registry:build": "shadcn build -o out/r",
     "lint": "biome lint .",
     "format": "pnpm biome format . --write && pnpm biome check . --write ",
     "format:fix": "pnpm biome check --fix .",
