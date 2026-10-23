@@ -90,10 +90,32 @@ export default defineSchema({
         effectiveDate: v.number(),           // Unix ms — when this position started
         endDate: v.optional(v.number()),     // Unix ms — null / absent = still current
         notes: v.optional(v.string()),
+        positionId: v.optional(v.id("positions")),   // absent on pre-masterlist rows
     })
         .index("by_employee", ["employeeId"])
         .index("by_org", ["orgId"])
         .index("by_employee_effective", ["employeeId", "effectiveDate"]),
+
+    /**
+     * Positions — the org's masterlist of job titles.
+     * Deactivation is the retirement path: history keeps referring to a position
+     * that is no longer offered. Deletion is blocked while any history row uses it.
+     */
+    positions: defineTable({
+        orgId: v.id("organizations"),
+        name: v.string(),
+        nameKey: v.string(),        // name.trim().toLowerCase() — case-insensitive uniqueness
+        department: v.optional(v.string()),
+        description: v.optional(v.string()),
+        isActive: v.boolean(),
+        createdBy: v.id("users"),
+        createdAt: v.number(),
+        updatedBy: v.id("users"),
+        updatedAt: v.number(),
+    })
+        .index("by_org", ["orgId"])
+        .index("by_org_active", ["orgId", "isActive"])
+        .index("by_org_name_key", ["orgId", "nameKey"]),
 
     // ─── Timekeeping ────────────────────────────────────────────────────────
 
@@ -116,10 +138,13 @@ export default defineSchema({
         approvedBy: v.optional(v.id("users")),
         rejectedReason: v.optional(v.string()),
         totalMinutes: v.optional(v.number()),
+        lockedAt: v.optional(v.number()),           // when the week became immutable
+        lockedBy: v.optional(v.id("users")),        // who locked it
     })
         .index("by_org", ["orgId"])
         .index("by_org_employee", ["orgId", "employeeId"])
-        .index("by_org_week", ["orgId", "weekStart"]),
+        .index("by_org_week", ["orgId", "weekStart"])
+        .index("by_org_employee_week", ["orgId", "employeeId", "weekStart"]),
 
     /**
      * Time entries — per employee per day with up to 3 intervals.
@@ -151,7 +176,8 @@ export default defineSchema({
     })
         .index("by_org", ["orgId"])
         .index("by_org_employee_date", ["orgId", "employeeId", "date"])
-        .index("by_org_date", ["orgId", "date"]),
+        .index("by_org_date", ["orgId", "date"])
+        .index("by_timesheet", ["timesheetId"]),     // optional field, drafts excluded
 
     // ─── Audit ──────────────────────────────────────────────────────────────
 
