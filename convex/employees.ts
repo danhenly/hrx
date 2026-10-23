@@ -1,4 +1,5 @@
 import { ConvexError, v } from "convex/values";
+import { logAudit } from "./audit";
 import { mutation, query } from "./_generated/server";
 import { requireAdmin, requireAuth, requireMembership } from "./helpers";
 
@@ -21,26 +22,41 @@ export const list = query({
         const userId = await requireAuth(ctx);
         await requireMembership(ctx, userId, orgId);
 
-        const employees = await ctx.db
-            .query("employees")
-            .withIndex("by_org", (q) => q.eq("orgId", orgId))
-            .order("asc")
-            .collect();
+        const [employees, positions] = await Promise.all([
+            ctx.db
+                .query("employees")
+                .withIndex("by_org", (q) => q.eq("orgId", orgId))
+                .order("asc")
+                .collect(),
+            ctx.db
+                .query("employeePositions")
+                .withIndex("by_org", (q) => q.eq("orgId", orgId))
+                .collect(),
+        ]);
 
-        // Attach the current (most-recent) position to each employee row.
-        return Promise.all(
-            employees.map(async (emp) => {
-                const positions = await ctx.db
-                    .query("employeePositions")
-                    .withIndex("by_employee_effective", (q) =>
-                        q.eq("employeeId", emp._id),
-                    )
-                    .order("desc")
-                    .collect();
-                const currentPosition = positions.find((p) => !p.endDate) ?? positions[0] ?? null;
-                return { ...emp, currentPosition };
-            }),
-        );
+        // Prefer the open row (no endDate); otherwise the latest effectiveDate.
+        const current = new Map<string, (typeof positions)[number]>();
+        for (const position of positions) {
+            const incumbent = current.get(position.employeeId);
+            if (!incumbent) {
+                current.set(position.employeeId, position);
+                continue;
+            }
+            const positionOpen = position.endDate === undefined;
+            const incumbentOpen = incumbent.endDate === undefined;
+            if (positionOpen !== incumbentOpen) {
+                if (positionOpen) current.set(position.employeeId, position);
+                continue;
+            }
+            if (position.effectiveDate > incumbent.effectiveDate) {
+                current.set(position.employeeId, position);
+            }
+        }
+
+        return employees.map((employee) => ({
+            ...employee,
+            currentPosition: current.get(employee._id) ?? null,
+        }));
     },
 });
 
@@ -86,7 +102,15 @@ export const create = mutation({
     handler: async (ctx, { orgId, ...fields }) => {
         const userId = await requireAuth(ctx);
         await requireMembership(ctx, userId, orgId);
-        return ctx.db.insert("employees", { orgId, ...fields });
+        const employeeId = await ctx.db.insert("employees", { orgId, ...fields });
+        await logAudit(ctx, {
+            orgId,
+            actorId: userId,
+            action: "employee.create",
+            entityType: "employees",
+            entityId: employeeId,
+        });
+        return employeeId;
     },
 });
 
@@ -110,6 +134,13 @@ export const update = mutation({
         if (!employee) throw new ConvexError("Employee not found");
         await requireMembership(ctx, userId, employee.orgId);
         await ctx.db.patch(employeeId, fields);
+        await logAudit(ctx, {
+            orgId: employee.orgId,
+            actorId: userId,
+            action: "employee.update",
+            entityType: "employees",
+            entityId: employeeId,
+        });
     },
 });
 
@@ -132,6 +163,13 @@ export const remove = mutation({
         await Promise.all(positions.map((p) => ctx.db.delete(p._id)));
 
         await ctx.db.delete(employeeId);
+        await logAudit(ctx, {
+            orgId: employee.orgId,
+            actorId: userId,
+            action: "employee.delete",
+            entityType: "employees",
+            entityId: employeeId,
+        });
     },
 });
 
@@ -156,21 +194,46 @@ export const addPosition = mutation({
         if (!employee) throw new ConvexError("Employee not found");
         await requireMembership(ctx, userId, employee.orgId);
 
-        // Close any currently-open position (endDate absent).
-        const openPosition = await ctx.db
+        // Latest position by effectiveDate (index covers the sort; no scan).
+        const latest = await ctx.db
             .query("employeePositions")
-            .withIndex("by_employee", (q) => q.eq("employeeId", employeeId))
-            .filter((q) => q.eq(q.field("endDate"), undefined))
+            .withIndex("by_employee_effective", (q) => q.eq("employeeId", employeeId))
+            .order("desc")
             .first();
-        if (openPosition) {
-            await ctx.db.patch(openPosition._id, { endDate: fields.effectiveDate });
+
+        if (latest) {
+            if (fields.effectiveDate <= latest.effectiveDate) {
+                throw new ConvexError(
+                    "Effective date must be after the previous position's effective date",
+                );
+            }
+            if (latest.endDate && fields.effectiveDate <= latest.endDate) {
+                throw new ConvexError(
+                    "Effective date must be after the previous position ended",
+                );
+            }
+            if (latest.endDate === undefined) {
+                await ctx.db.patch(latest._id, { endDate: fields.effectiveDate });
+            }
         }
 
-        return ctx.db.insert("employeePositions", {
+        if (fields.salary !== undefined && fields.salary < 0) {
+            throw new ConvexError("Salary cannot be negative");
+        }
+
+        const positionId = await ctx.db.insert("employeePositions", {
             orgId: employee.orgId,
             employeeId,
             ...fields,
         });
+        await logAudit(ctx, {
+            orgId: employee.orgId,
+            actorId: userId,
+            action: "employeePosition.create",
+            entityType: "employeePositions",
+            entityId: positionId,
+        });
+        return positionId;
     },
 });
 
@@ -192,7 +255,22 @@ export const updatePosition = mutation({
         const position = await ctx.db.get(positionId);
         if (!position) throw new ConvexError("Position not found");
         await requireMembership(ctx, userId, position.orgId);
+        const effectiveDate = fields.effectiveDate ?? position.effectiveDate;
+        const endDate = fields.endDate ?? position.endDate;
+        if (endDate !== undefined && endDate <= effectiveDate) {
+            throw new ConvexError("End date must be after the effective date");
+        }
+        if (fields.salary !== undefined && fields.salary < 0) {
+            throw new ConvexError("Salary cannot be negative");
+        }
         await ctx.db.patch(positionId, fields);
+        await logAudit(ctx, {
+            orgId: position.orgId,
+            actorId: userId,
+            action: "employeePosition.update",
+            entityType: "employeePositions",
+            entityId: positionId,
+        });
     },
 });
 
@@ -207,5 +285,12 @@ export const removePosition = mutation({
         if (!position) throw new ConvexError("Position not found");
         await requireAdmin(ctx, userId, position.orgId);
         await ctx.db.delete(positionId);
+        await logAudit(ctx, {
+            orgId: position.orgId,
+            actorId: userId,
+            action: "employeePosition.delete",
+            entityType: "employeePositions",
+            entityId: positionId,
+        });
     },
 });
