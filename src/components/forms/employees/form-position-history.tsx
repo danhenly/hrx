@@ -2,7 +2,6 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery } from "convex/react";
-import { ArrowRight } from "lucide-react";
 import { format } from "date-fns";
 import { CalendarIcon, Plus, Trash2 } from "lucide-react";
 import { useTransition } from "react";
@@ -35,7 +34,6 @@ import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import type { EmployeePosition } from "@/data/employees";
 import { cn } from "@/lib/utils";
-import { useActiveOrg } from "@/providers/org-provider";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 
