@@ -94,7 +94,8 @@ export default defineSchema({
     })
         .index("by_employee", ["employeeId"])
         .index("by_org", ["orgId"])
-        .index("by_employee_effective", ["employeeId", "effectiveDate"]),
+        .index("by_employee_effective", ["employeeId", "effectiveDate"])
+        .index("by_org_position", ["orgId", "positionId"]),    // NEW — delete guard
 
     /**
      * Positions — the org's masterlist of job titles.

@@ -12,6 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { EmployeeWithPosition } from "@/data/employees";
 import { api } from "../../../../convex/_generated/api";
+import { useActiveOrg } from "@/providers/org-provider";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import {
     type EmployeeProfileValues,
@@ -89,6 +90,7 @@ function EditEmployeeSheetContent({
     const detail = useQuery(api.employees.get, {
         employeeId: employee._id as Id<"employees">,
     });
+    const { orgId } = useActiveOrg();
 
     async function handleSubmit(values: EmployeeProfileValues) {
         await updateEmployee({
@@ -134,6 +136,7 @@ function EditEmployeeSheetContent({
                         employeeId={employee._id as Id<"employees">}
                         positions={detail.positions}
                         isAdmin={isAdmin}
+                        orgId={orgId}
                     />
                 )}
             </TabsContent>
