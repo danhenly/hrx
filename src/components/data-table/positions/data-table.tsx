@@ -1,6 +1,5 @@
 "use client";
 
-import type { Row } from "@tanstack/react-table";
 import { Lock, Pencil } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -77,11 +76,10 @@ export function PositionsDataTable({
                                     <TooltipProvider>
                                         <Tooltip>
                                             <TooltipTrigger asChild>
-                                                <span tabIndex={0}>
-                                                    <Button
+                                                <Button
                                                         size="icon"
                                                         variant="ghost"
-                                                        disabled={position.usageCount > 0}
+                                                        className="text-destructive hover:text-destructive"
                                                         onClick={() =>
                                                             onSetActive(position._id, false)
                                                         }
@@ -93,7 +91,6 @@ export function PositionsDataTable({
                                                             <Pencil className="h-3.5 w-3.5" />
                                                         )}
                                                     </Button>
-                                                </span>
                                             </TooltipTrigger>
                                             {position.usageCount > 0 && (
                                                 <TooltipContent>
