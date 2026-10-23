@@ -26,6 +26,11 @@ const settings = [
     href: "/dashboard/settings/account",
   },
   {
+    title: "Positions",
+    description: "Maintain the job-title masterlist used by employee records.",
+    href: "/dashboard/settings/positions",
+  },
+  {
     title: "Audit log",
     description: "View the trail of membership and approval changes.",
     href: "/dashboard/settings/audit",

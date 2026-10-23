@@ -1,7 +1,8 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
+import { ArrowRight } from "lucide-react";
 import { format } from "date-fns";
 import { CalendarIcon, Plus, Trash2 } from "lucide-react";
 import { useTransition } from "react";
@@ -34,12 +35,12 @@ import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import type { EmployeePosition } from "@/data/employees";
 import { cn } from "@/lib/utils";
+import { useActiveOrg } from "@/providers/org-provider";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 
 const addPositionSchema = z.object({
-    jobTitle: z.string().min(1, "Job title is required"),
-    department: z.string().optional(),
+    positionId: z.string().min(1, "Position is required"),
     salary: z.coerce
         .number()
         .positive("Must be positive")
@@ -55,14 +56,24 @@ interface FormPositionHistoryProps {
     employeeId: Id<"employees">;
     positions: EmployeePosition[];
     isAdmin: boolean;
+    orgId: Id<"organizations"> | undefined;
 }
 
 export function FormPositionHistory({
     employeeId,
     positions,
     isAdmin,
+    orgId,
 }: FormPositionHistoryProps) {
     const addPosition = useMutation(api.employees.addPosition);
+    const masterlist = useQuery(
+        api.positions.list,
+        orgId ? { orgId, includeInactive: true } : "skip",
+    );
+    const activePositions = (masterlist ?? []).filter((p) => p.isActive);
+    const positionById = new Map(
+        (masterlist ?? []).map((p) => [p._id as string, p]),
+    );
     const removePosition = useMutation(api.employees.removePosition);
     const [isAddPending, startAddTransition] = useTransition();
     const [isDeletePending, startDeleteTransition] = useTransition();
@@ -70,8 +81,7 @@ export function FormPositionHistory({
     const form = useForm<AddPositionValues>({
         resolver: zodResolver(addPositionSchema),
         defaultValues: {
-            jobTitle: "",
-            department: "",
+            positionId: "",
             salary: "",
             effectiveDate: new Date(),
             notes: "",
@@ -84,8 +94,7 @@ export function FormPositionHistory({
             try {
                 await addPosition({
                     employeeId,
-                    jobTitle: values.jobTitle,
-                    department: values.department || undefined,
+                    positionId: values.positionId as Id<"positions">,
                     salary:
                         values.salary !== "" && values.salary !== undefined
                             ? Number(values.salary)
@@ -95,8 +104,7 @@ export function FormPositionHistory({
                 });
                 toast.success("Position added");
                 form.reset({
-                    jobTitle: "",
-                    department: "",
+                    positionId: "",
                     salary: "",
                     effectiveDate: new Date(),
                     notes: "",
@@ -140,12 +148,24 @@ export function FormPositionHistory({
                             <div className="flex items-start justify-between gap-2">
                                 <div className="space-y-0.5">
                                     <div className="flex items-center gap-2 font-medium">
-                                        {pos.jobTitle}
+                                        <Input
+                                            readOnly
+                                            value={pos.jobTitle}
+                                            aria-label="Job title (recorded)"
+                                            className="h-8 w-auto cursor-default border-transparent bg-muted/40 text-muted-foreground px-2"
+                                        />
                                         {idx === 0 && !pos.endDate && (
                                             <Badge variant="default" className="text-xs h-5">
                                                 Current
                                             </Badge>
                                         )}
+                                        {pos.positionId &&
+                                            positionById.get(pos.positionId)?.isActive ===
+                                                false && (
+                                                <Badge variant="secondary" className="text-xs h-5">
+                                                    Inactive
+                                                </Badge>
+                                            )}
                                     </div>
                                     {pos.department && (
                                         <div className="text-muted-foreground">
@@ -210,34 +230,67 @@ export function FormPositionHistory({
                             onSubmit={form.handleSubmit(handleAdd)}
                             className="space-y-3 rounded-md border p-3"
                         >
-                            <div className="grid grid-cols-2 gap-3">
-                                <FormField
-                                    control={form.control}
-                                    name="jobTitle"
-                                    render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>Job title</FormLabel>
-                                            <FormControl>
-                                                <Input placeholder="Software Engineer" {...field} />
-                                            </FormControl>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
-                                <FormField
-                                    control={form.control}
-                                    name="department"
-                                    render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>Department</FormLabel>
-                                            <FormControl>
-                                                <Input placeholder="Engineering" {...field} />
-                                            </FormControl>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
-                            </div>
+                            {activePositions.length === 0 ? (
+                                <div className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
+                                    No active positions yet — add them under{" "}
+                                    <a
+                                        className="underline"
+                                        href="/dashboard/settings/positions"
+                                    >
+                                        Settings → Positions
+                                    </a>{" "}
+                                    first.
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-2 gap-3">
+                                    <FormField
+                                        control={form.control}
+                                        name="positionId"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Position</FormLabel>
+                                                <FormControl>
+                                                    <select
+                                                        className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none"
+                                                        value={field.value}
+                                                        onChange={field.onChange}
+                                                        aria-label="Position"
+                                                    >
+                                                        <option value="">Select a position…</option>
+                                                        {activePositions.map((pos) => (
+                                                            <option
+                                                                key={pos._id}
+                                                                value={pos._id}
+                                                            >
+                                                                {pos.name}
+                                                                {pos.department
+                                                                    ? ` · ${pos.department}`
+                                                                    : ""}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                    <FormItem>
+                                        <FormLabel>Department</FormLabel>
+                                        <FormControl>
+                                            <Input
+                                                readOnly
+                                                value={
+                                                    positionById.get(
+                                                        form.watch("positionId"),
+                                                    )?.department ?? ""
+                                                }
+                                                aria-label="Department (from position)"
+                                                className="cursor-default bg-muted/40 text-muted-foreground"
+                                            />
+                                        </FormControl>
+                                    </FormItem>
+                                </div>
+                            )}
 
                             <div className="grid grid-cols-2 gap-3">
                                 <FormField
@@ -318,7 +371,11 @@ export function FormPositionHistory({
                                 )}
                             />
 
-                            <Button type="submit" size="sm" disabled={isAddPending}>
+                            <Button
+                                type="submit"
+                                size="sm"
+                                disabled={isAddPending || activePositions.length === 0}
+                            >
                                 {isAddPending ? "Saving…" : "Save position"}
                             </Button>
                         </form>
