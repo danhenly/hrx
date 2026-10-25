@@ -1,3 +1,5 @@
+"use client";
+
 import { AppSidebar } from "@/components/nav/app-sidebar";
 import { OrgProvider, useActiveOrg } from "@/providers/org-provider";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
