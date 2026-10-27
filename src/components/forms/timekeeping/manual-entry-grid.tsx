@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useMutation } from "convex/react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -46,8 +46,6 @@ interface ManualEntryGridProps {
     employees: Employee[];
     entries: TimeEntry[];
     weekStart: Date;
-    weekEnd: Date;
-    onWeekChange: (date: Date) => void;
 }
 
 export function ManualEntryGrid({
@@ -55,8 +53,6 @@ export function ManualEntryGrid({
     employees,
     entries,
     weekStart,
-    weekEnd,
-    onWeekChange,
 }: ManualEntryGridProps) {
     const [rows, setRows] = useState<RowState[]>([]);
     const [isPending, startTransition] = useTransition();
@@ -82,12 +78,6 @@ export function ManualEntryGrid({
             return [...mapped, ...unsaved];
         });
     }, [entries]);
-
-    const weekLabel = useMemo(() => {
-        const start = weekStart.toLocaleDateString();
-        const end = weekEnd.toLocaleDateString();
-        return `${start} – ${end}`;
-    }, [weekStart, weekEnd]);
 
     function addRow() {
         const defaultEmployee = employees[0]?._id ?? "";
@@ -176,36 +166,31 @@ export function ManualEntryGrid({
     }
 
     return (
-        <div className="space-y-4">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex items-center gap-2">
-                    <label className="text-sm font-medium text-muted-foreground" htmlFor="weekStart">
-                        Week start
-                    </label>
-                    <Input
-                        id="weekStart"
-                        type="date"
-                        className="w-48"
-                        value={formatDateInput(weekStart.getTime())}
-                        onChange={(e) => onWeekChange(new Date(e.target.value))}
-                    />
-                    <span className="text-sm text-muted-foreground">{weekLabel}</span>
-                </div>
-                <Button variant="secondary" onClick={addRow} disabled={isPending || employees.length === 0}>
+        <div className="flex min-h-0 flex-col">
+            <div className="flex items-center justify-between gap-3 px-(--page-gutter) py-3">
+                <p className="text-muted-foreground text-xs">
+                    Up to three intervals per day. A shift crossing midnight counts on its
+                    start date.
+                </p>
+                <Button
+                    variant="secondary"
+                    onClick={addRow}
+                    disabled={isPending || employees.length === 0}
+                >
                     Add row
                 </Button>
             </div>
 
-            <div className="overflow-auto rounded-md border">
+            <div className="border-t">
                 <table className="min-w-full text-sm">
-                    <thead className="border-b bg-muted/50 text-left">
+                    <thead className="sticky top-0 z-10 border-b bg-background text-left">
                         <tr>
-                            <th className="px-3 py-2">Employee</th>
-                            <th className="px-3 py-2">Date</th>
-                            <th className="px-3 py-2">Time In/Out (up to 3)</th>
-                            <th className="px-3 py-2">Notes</th>
-                            <th className="px-3 py-2">Status</th>
-                            <th className="px-3 py-2 text-right">Actions</th>
+                            <th className="caption-style h-(--row-head-height) px-3 font-normal text-muted-foreground">Employee</th>
+                            <th className="caption-style h-(--row-head-height) px-3 font-normal text-muted-foreground">Date</th>
+                            <th className="caption-style h-(--row-head-height) px-3 font-normal text-muted-foreground">Time In/Out (up to 3)</th>
+                            <th className="caption-style h-(--row-head-height) px-3 font-normal text-muted-foreground">Notes</th>
+                            <th className="caption-style h-(--row-head-height) px-3 font-normal text-muted-foreground">Status</th>
+                            <th className="caption-style h-(--row-head-height) px-3 text-right font-normal text-muted-foreground">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
