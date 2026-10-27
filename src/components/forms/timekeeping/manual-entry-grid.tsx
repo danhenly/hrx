@@ -18,6 +18,7 @@ import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import type { Employee } from "@/data/employees";
 import type { TimeEntry } from "@/data/timekeeping";
+import { PH_OFFSET_MS } from "@/lib/week";
 
 const EMPTY_INTERVALS: IntervalInput[] = [
     { start: "", end: "" },
@@ -329,21 +330,34 @@ function normalizeIntervals(intervals: TimeEntry["intervals"]): IntervalInput[] 
     return padded.slice(0, 3);
 }
 
+// Date/time helpers are Manila-pinned. Every anchor in this grid is a Manila
+// midnight expressed as UTC ms (a UTC+8 viewer's local midnight happens to be
+// correct, which is why this hid for so long). Formatting with the viewer's
+// zone or with toISOString() shifts the day: a Manila Monday 00:00 is Sunday
+// 16:00 UTC, so the grid pre-filled the *previous* Sunday as the row date and
+// filed saved entries outside the queried week.
+const DATE_INPUT_FORMAT = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Manila",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+});
+
 function formatDateInput(ms: number | string) {
-    const date = new Date(ms);
-    return date.toISOString().slice(0, 10);
+    return DATE_INPUT_FORMAT.format(new Date(ms));
 }
 
 function formatTimeInput(ms: number) {
-    const d = new Date(ms);
-    const h = String(d.getHours()).padStart(2, "0");
-    const m = String(d.getMinutes()).padStart(2, "0");
+    const manila = new Date(ms + PH_OFFSET_MS);
+    const h = String(manila.getUTCHours()).padStart(2, "0");
+    const m = String(manila.getUTCMinutes()).padStart(2, "0");
     return `${h}:${m}`;
 }
 
+/** "YYYY-MM-DD" (a Manila wall-clock date) -> Manila midnight in UTC ms. */
 function dateInputToMs(value: string) {
-    const d = new Date(value + "T00:00:00");
-    return d.getTime();
+    const [year, month, day] = value.split("-").map(Number);
+    return Date.UTC(year, month - 1, day) - PH_OFFSET_MS;
 }
 
 function buildIntervals(dateInput: string, intervals: IntervalInput[]) {
@@ -362,7 +376,7 @@ function buildIntervals(dateInput: string, intervals: IntervalInput[]) {
 
 function timeStringToMs(baseDateMs: number, time: string) {
     const [hours, minutes] = time.split(":").map((x) => Number.parseInt(x, 10));
-    const date = new Date(baseDateMs);
-    date.setHours(hours, minutes, 0, 0);
-    return date.getTime();
+    // baseDateMs is already Manila midnight, so offsets are plain arithmetic --
+    // no Date#setHours, which would re-interpret the wall clock in the viewer's zone.
+    return baseDateMs + hours * 60 * 60 * 1000 + minutes * 60 * 1000;
 }
