@@ -3,9 +3,8 @@ import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
 import { mutation, query } from "./_generated/server";
 import { logAudit } from "./audit";
-import { DAY_MS, manilaMidnight, weekStartOf } from "./lib/week";
+import { DAY_MS, manilaMidnight } from "./lib/week";
 import { requireAdmin, requireAuth, requireMembership } from "./helpers";
-import { syncSheetForWeek } from "./timesheets";
 
 const intervalInput = v.object({
     start: v.number(), // Unix ms
@@ -225,24 +224,6 @@ export const upsertForDay = mutation({
 
         const { intervals, totalMinutes } = validateIntervals(rawIntervals);
         const day = manilaMidnight(date);
-        const weekStart = weekStartOf(day);
-
-        // A submitted/approved/locked week is immutable — the entry grid must not
-        // be able to edit around the approval it was granted.
-        const sheet = await ctx.db
-            .query("timesheets")
-            .withIndex("by_org_employee_week", (q) =>
-                q.eq("orgId", orgId).eq("employeeId", employeeId).eq("weekStart", weekStart),
-            )
-            .unique();
-        if (sheet && !["open", "rejected"].includes(sheet.status)) {
-            throw new ConvexError(
-                sheet.status === "locked"
-                    ? "This week is locked and cannot be edited"
-                    : "This week has been submitted — it must be rejected before editing",
-            );
-        }
-
         const existing = await ctx.db
             .query("timeEntries")
             .withIndex("by_org_employee_date", (q) =>
@@ -266,7 +247,6 @@ export const upsertForDay = mutation({
                 status: existing.status,
                 updatedBy: userId,
             });
-            await syncSheetForWeek(ctx, orgId, employeeId, weekStart);
             return existing._id;
         }
 
@@ -282,9 +262,6 @@ export const upsertForDay = mutation({
             createdBy: userId,
             updatedBy: userId,
         });
-        // A week with drafts must still have a sheet, otherwise the Timesheets
-        // page has nothing to list until someone submits.
-        await syncSheetForWeek(ctx, orgId, employeeId, weekStart);
         return createdId;
     },
 });
@@ -362,29 +339,19 @@ export const deleteDraft = mutation({
         if (!entry) throw new ConvexError("Entry not found");
         const membership = await requireMembership(ctx, userId, entry.orgId);
 
-        // Same immutability guard as upsertForDay: never delete out of an
-        // already-submitted/approved/locked week.
-        const weekStart = weekStartOf(entry.date);
-        const sheet = await ctx.db
-            .query("timesheets")
-            .withIndex("by_org_employee_week", (q) =>
-                q.eq("orgId", entry.orgId).eq("employeeId", entry.employeeId).eq("weekStart", weekStart),
-            )
-            .unique();
-        if (sheet && !["open", "rejected"].includes(sheet.status)) {
-            throw new ConvexError(
-                sheet.status === "locked"
-                    ? "This week is locked and cannot be edited"
-                    : "This week has been submitted — it must be rejected before editing",
-            );
-        }
-
         if (entry.status !== "draft") throw new ConvexError("Only draft entries can be deleted");
         if (entry.createdBy !== userId && membership.role !== "admin") {
             throw new ConvexError("Only creators or admins can delete this entry");
         }
         await ctx.db.delete(entryId);
-        await syncSheetForWeek(ctx, entry.orgId, entry.employeeId, weekStart);
+
+        await logAudit(ctx, {
+            orgId: entry.orgId,
+            actorId: userId,
+            action: "timeEntry.delete",
+            entityType: "timeEntries",
+            entityId: entryId,
+        });
     },
 });
 
