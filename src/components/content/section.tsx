@@ -69,11 +69,18 @@ export function SectionTitle({
 export function SectionGroup({
   children,
   className,
+  width = "narrow",
   ...props
-}: React.ComponentProps<"div">) {
+}: React.ComponentProps<"div"> & { width?: "narrow" | "wide" }) {
   return (
     <div
-      className={cn("mx-auto w-full max-w-4xl space-y-8 px-4 py-8", className)}
+      className={cn(
+        "mx-auto w-full",
+        width === "narrow"
+          ? "max-w-4xl space-y-8 px-4 py-8"
+          : "max-w-none space-y-6 px-(--page-gutter) py-6",
+        className,
+      )}
       {...props}
     >
       {children}

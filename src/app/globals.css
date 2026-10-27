@@ -129,6 +129,26 @@
   --sh-jsxliterals: #6266d1;
   --sh-property: #e25a1c;
   --sh-entity: #e25a1c;
+
+  /* Wide module layout (Kargul parity).
+     Data modules run full-bleed with a gutter; reading/form pages keep the
+     `narrow` cap, which is what --max-width-global exists for. */
+  --max-width-global: 76.25rem; /* 1220px */
+  --page-gutter: 1rem; /* data-module horizontal padding */
+  --row-height: 2.625rem; /* 42px dense table row */
+  --row-head-height: 2.375rem; /* 38px dense table head */
+}
+
+@media (min-width: 48rem) {
+  :root {
+    --page-gutter: 1.5rem;
+  }
+}
+
+@media (min-width: 64rem) {
+  :root {
+    --page-gutter: 2rem;
+  }
 }
 
 .dark {
@@ -198,6 +218,16 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+
+  /* Dense-table type utilities. Namespaced classes, not element selectors, so
+     they never override the h1-p base styling. */
+  .caption-style {
+    @apply text-[12px] font-normal leading-none tracking-normal;
+  }
+
+  .eyebrow-style {
+    @apply text-[12px] font-normal uppercase leading-none tracking-[1px];
   }
 }
 
