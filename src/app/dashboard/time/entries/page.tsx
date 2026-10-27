@@ -1,89 +1,90 @@
 "use client";
 
-import Link from "next/link";
-import { endOfWeek, startOfWeek } from "date-fns";
-import { useMemo, useState } from "react";
 import { useQuery } from "convex/react";
-import {
-    Section,
-    SectionDescription,
-    SectionGroup,
-    SectionHeader,
-    SectionTitle,
-} from "@/components/content/section";
-import { FormCard, FormCardContent } from "@/components/forms/form-card";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useState } from "react";
 import { ManualEntryGrid } from "@/components/forms/timekeeping/manual-entry-grid";
+import { ModuleBody, ModuleToolbar } from "@/components/layout/module";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Employee } from "@/data/employees";
 import type { TimeEntry } from "@/data/timekeeping";
-import { api } from "../../../../../convex/_generated/api";
+import { WEEK_MS, weekStartOf } from "@/lib/week";
+import { formatWeekRange } from "@/lib/week-display";
 import { useActiveOrg } from "@/providers/org-provider";
+import { api } from "../../../../../convex/_generated/api";
 
 export default function TimeEntriesPage() {
-    const { orgId } = useActiveOrg();
+  const { orgId } = useActiveOrg();
 
-    const [anchorDate, setAnchorDate] = useState<Date>(() => new Date());
+  // Canonical Manila week anchor, same arithmetic as the server.
+  const [weekStartMs, setWeekStartMs] = useState(() => weekStartOf(Date.now()));
 
-    const weekStart = useMemo(() => startOfWeek(anchorDate, { weekStartsOn: 1 }), [anchorDate]);
-    const weekEnd = useMemo(() => endOfWeek(anchorDate, { weekStartsOn: 1 }), [anchorDate]);
+  const weekStart = new Date(weekStartMs);
 
-    const employees = useQuery(api.employees.list, orgId ? { orgId } : "skip") as
-        | Employee[]
-        | undefined;
+  const employees = useQuery(api.employees.list, orgId ? { orgId } : "skip") as
+    | Employee[]
+    | undefined;
+  const entries = useQuery(
+    api.timeEntries.listByDateRange,
+    orgId
+      ? { orgId, startDate: weekStartMs, endDate: weekStartMs + WEEK_MS - 1 }
+      : "skip",
+  ) as TimeEntry[] | undefined;
 
-    const entries = useQuery(
-        api.timeEntries.listByDateRange,
-        orgId
-            ? {
-                orgId,
-                startDate: weekStart.getTime(),
-                endDate: weekEnd.getTime(),
-            }
-            : "skip",
-    ) as TimeEntry[] | undefined;
+  const isLoading = !orgId || entries === undefined || employees === undefined;
 
-    function handleWeekChange(date: Date) {
-        setAnchorDate(startOfWeek(date, { weekStartsOn: 1 }));
-    }
+  return (
+    <>
+      <ModuleToolbar>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="outline"
+            size="icon"
+            aria-label="Previous week"
+            onClick={() => setWeekStartMs((current) => current - WEEK_MS)}
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <span className="min-w-[190px] px-2 font-medium text-sm tabular-nums">
+            {formatWeekRange(weekStartMs)}
+          </span>
+          <Button
+            variant="outline"
+            size="icon"
+            aria-label="Next week"
+            onClick={() => setWeekStartMs((current) => current + WEEK_MS)}
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setWeekStartMs(weekStartOf(Date.now()))}
+          >
+            This week
+          </Button>
+        </div>
+        <p className="text-muted-foreground text-xs">
+          Draft or resubmit daily entries; approve from Timesheets.
+        </p>
+      </ModuleToolbar>
 
-    const isLoading = !orgId || entries === undefined || employees === undefined;
-
-    return (
-        <SectionGroup>
-            <Section>
-                <SectionHeader className="sm:flex-row sm:items-end sm:justify-between">
-                    <div>
-                        <SectionTitle>Manual entries</SectionTitle>
-                        <SectionDescription>
-                            Use this form to draft or resubmit daily time entries. For an overview of your
-                            timesheets, head back to the main time page.
-                        </SectionDescription>
-                    </div>
-                    <Button size="sm" variant="outline" asChild>
-                        <Link href="/dashboard/time">View timesheets</Link>
-                    </Button>
-                </SectionHeader>
-                <FormCard>
-                    <FormCardContent className="p-4">
-                        {isLoading ? (
-                            <div className="space-y-3">
-                                <Skeleton className="h-6 w-64" />
-                                <Skeleton className="h-48 w-full" />
-                            </div>
-                        ) : (
-                            <ManualEntryGrid
-                                orgId={orgId}
-                                employees={employees}
-                                entries={entries}
-                                weekStart={weekStart}
-                                weekEnd={weekEnd}
-                                onWeekChange={handleWeekChange}
-                            />
-                        )}
-                    </FormCardContent>
-                </FormCard>
-            </Section>
-        </SectionGroup>
-    );
+      <ModuleBody>
+        {isLoading ? (
+          <div className="space-y-3 px-(--page-gutter) py-4">
+            <Skeleton className="h-6 w-64" />
+            <Skeleton className="h-48 w-full" />
+          </div>
+        ) : (
+          <ManualEntryGrid
+            orgId={orgId}
+            employees={employees}
+            entries={entries}
+            weekStart={weekStart}
+          />
+        )}
+      </ModuleBody>
+    </>
+  );
 }
