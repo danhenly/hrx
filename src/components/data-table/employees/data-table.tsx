@@ -78,16 +78,29 @@ export function EmployeeDataTable({
   }
 
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Name</TableHead>
-          <TableHead>Contact</TableHead>
-          <TableHead>Status</TableHead>
-          <TableHead>Current Position</TableHead>
-          <TableHead>Department</TableHead>
-          <TableHead>Hire Date</TableHead>
-          <TableHead>
+    // overflow-x-visible hands the scroll parent back to ModuleBody so the head sticks.
+    <Table containerClassName="overflow-x-visible">
+      <TableHeader className="sticky top-0 z-10 bg-background">
+        <TableRow className="hover:bg-transparent">
+          <TableHead className="caption-style h-(--row-head-height) font-normal text-muted-foreground">
+            Name
+          </TableHead>
+          <TableHead className="caption-style h-(--row-head-height) font-normal text-muted-foreground">
+            Contact
+          </TableHead>
+          <TableHead className="caption-style h-(--row-head-height) font-normal text-muted-foreground">
+            Status
+          </TableHead>
+          <TableHead className="caption-style h-(--row-head-height) font-normal text-muted-foreground">
+            Current Position
+          </TableHead>
+          <TableHead className="caption-style h-(--row-head-height) font-normal text-muted-foreground">
+            Department
+          </TableHead>
+          <TableHead className="caption-style h-(--row-head-height) font-normal text-muted-foreground">
+            Hire Date
+          </TableHead>
+          <TableHead className="caption-style h-(--row-head-height) font-normal text-muted-foreground">
             <span className="sr-only">Actions</span>
           </TableHead>
         </TableRow>
