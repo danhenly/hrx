@@ -169,9 +169,15 @@ export default defineSchema({
             v.literal("submitted"),
             v.literal("approved"),
             v.literal("rejected"),
+            v.literal("locked"), // frozen for payroll; replaces the week sheet's state
         ),
         rejectedReason: v.optional(v.string()),
-        timesheetId: v.optional(v.id("timesheets")),
+        timesheetId: v.optional(v.id("timesheets")), // legacy; no longer written
+        submittedAt: v.optional(v.number()),
+        approvedAt: v.optional(v.number()),
+        approvedBy: v.optional(v.id("users")),
+        lockedAt: v.optional(v.number()),
+        lockedBy: v.optional(v.id("users")),
         createdBy: v.id("users"),
         updatedBy: v.id("users"),
     })

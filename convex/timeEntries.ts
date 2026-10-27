@@ -1,7 +1,9 @@
 import { ConvexError, v } from "convex/values";
+import type { Doc, Id } from "./_generated/dataModel";
+import type { MutationCtx } from "./_generated/server";
 import { mutation, query } from "./_generated/server";
 import { logAudit } from "./audit";
-import { manilaMidnight, weekStartOf } from "./lib/week";
+import { DAY_MS, manilaMidnight, weekStartOf } from "./lib/week";
 import { requireAdmin, requireAuth, requireMembership } from "./helpers";
 import { syncSheetForWeek } from "./timesheets";
 
@@ -47,20 +49,164 @@ export const listByDateRange = query({
         const userId = await requireAuth(ctx);
         await requireMembership(ctx, userId, orgId);
 
+        // Both bounds are Manila-midnight anchors and `end` is inclusive: entry
+        // dates are stored as midnight anchors, so lte() already covers the day.
+        const start = manilaMidnight(startDate);
+        const end = manilaMidnight(endDate);
+        if (end < start) {
+            throw new ConvexError("End date must be on or after the start date");
+        }
+        if (end - start > MAX_RANGE_DAYS * DAY_MS) {
+            throw new ConvexError(`Date range cannot exceed ${MAX_RANGE_DAYS} days`);
+        }
+
         if (employeeId) await assertEmployeeOrg(ctx, orgId, employeeId);
 
         const entries = await ctx.db
             .query("timeEntries")
             .withIndex("by_org_date", (q) =>
-                q.eq("orgId", orgId).gte("date", startDate).lte("date", endDate)
+                q.eq("orgId", orgId).gte("date", start).lte("date", end),
             )
             .collect();
 
         return employeeId
-            ? entries.filter((e) => e.employeeId === employeeId)
+            ? entries.filter((entry) => entry.employeeId === employeeId)
             : entries;
     },
 });
+
+// ─── Daily lifecycle (batch) ──────────────────────────────────────────────────
+//
+// The day is the submission unit: one timeEntry row is one employee-day. These
+// four mutations take an explicit id list so a selection is one transaction
+// instead of one round-trip per row. Ineligible rows are reported, not fatal —
+// a locked day in the selection must not abort the other forty.
+
+type BatchAction = "submit" | "approve" | "reject" | "lock";
+type EntryStatus = Doc<"timeEntries">["status"];
+
+type BatchResult = {
+    applied: number;
+    skipped: { entryId: Id<"timeEntries">; reason: string }[];
+};
+
+const MAX_RANGE_DAYS = 92;
+const MAX_BATCH = 60;
+
+const REQUIRED_FROM: Record<BatchAction, EntryStatus[]> = {
+    submit: ["draft", "rejected"],
+    approve: ["submitted"],
+    reject: ["submitted"],
+    lock: ["approved"],
+};
+
+const AUDIT_ACTION: Record<BatchAction, string> = {
+    submit: "timeEntry.submit",
+    approve: "timeEntry.approve",
+    reject: "timeEntry.reject",
+    lock: "timeEntry.lock",
+};
+
+function patchFor(
+    action: BatchAction,
+    userId: Id<"users">,
+    now: number,
+    reason?: string,
+): Partial<Doc<"timeEntries">> {
+    switch (action) {
+        case "submit":
+            return {
+                status: "submitted",
+                submittedAt: now,
+                rejectedReason: undefined,
+                updatedBy: userId,
+            };
+        case "approve":
+            return {
+                status: "approved",
+                approvedAt: now,
+                approvedBy: userId,
+                rejectedReason: undefined,
+                updatedBy: userId,
+            };
+        case "reject":
+            return { status: "rejected", rejectedReason: reason, updatedBy: userId };
+        case "lock":
+            return { status: "locked", lockedAt: now, lockedBy: userId, updatedBy: userId };
+    }
+}
+
+/** Load and org-check a batch; ids outside the org are reported, not thrown. */
+async function loadBatch(
+    ctx: MutationCtx,
+    orgId: Id<"organizations">,
+    entryIds: Id<"timeEntries">[],
+): Promise<{ entries: Doc<"timeEntries">[]; skipped: BatchResult["skipped"] }> {
+    const unique = [...new Set(entryIds)];
+    if (unique.length === 0) throw new ConvexError("Select at least one entry");
+    if (unique.length > MAX_BATCH) {
+        throw new ConvexError(`Select at most ${MAX_BATCH} entries per action`);
+    }
+
+    const entries: Doc<"timeEntries">[] = [];
+    const skipped: BatchResult["skipped"] = [];
+    for (const entryId of unique) {
+        const entry = await ctx.db.get(entryId);
+        if (!entry || entry.orgId !== orgId) {
+            skipped.push({ entryId, reason: "Entry not found in this organisation" });
+            continue;
+        }
+        entries.push(entry);
+    }
+    return { entries, skipped };
+}
+
+/**
+ * The only place a day transition is applied. Shared with the legacy week
+ * wrappers in `timesheets.ts` so the guards exist in exactly one place.
+ */
+export async function applyStatusBatch(
+    ctx: MutationCtx,
+    actor: { userId: Id<"users">; role: Doc<"members">["role"] },
+    entries: Doc<"timeEntries">[],
+    action: BatchAction,
+    reason?: string,
+): Promise<BatchResult> {
+    const allowed = REQUIRED_FROM[action];
+    const now = Date.now();
+    const skipped: BatchResult["skipped"] = [];
+    let applied = 0;
+
+    for (const entry of entries) {
+        if (!allowed.includes(entry.status)) {
+            skipped.push({ entryId: entry._id, reason: `Already ${entry.status}` });
+            continue;
+        }
+        if (action === "submit" && entry.createdBy !== actor.userId && actor.role !== "admin") {
+            skipped.push({
+                entryId: entry._id,
+                reason: "Only the creator or an admin can submit this entry",
+            });
+            continue;
+        }
+        if (action !== "submit" && actor.role !== "admin") {
+            skipped.push({ entryId: entry._id, reason: "Admin role required" });
+            continue;
+        }
+
+        await ctx.db.patch(entry._id, patchFor(action, actor.userId, now, reason));
+        await logAudit(ctx, {
+            orgId: entry.orgId,
+            actorId: actor.userId,
+            action: AUDIT_ACTION[action],
+            entityType: "timeEntries",
+            entityId: entry._id,
+        });
+        applied += 1;
+    }
+
+    return { applied, skipped };
+}
 
 // ─── Mutations ─────────────────────────────────────────────────────────────
 
@@ -239,5 +385,87 @@ export const deleteDraft = mutation({
         }
         await ctx.db.delete(entryId);
         await syncSheetForWeek(ctx, entry.orgId, entry.employeeId, weekStart);
+    },
+});
+
+// ─── Daily batch mutations ────────────────────────────────────────────────────
+//
+// One transaction per action. `skipped` never aborts the batch: see applyStatusBatch.
+
+export const submitDays = mutation({
+    args: {
+        orgId: v.id("organizations"),
+        entryIds: v.array(v.id("timeEntries")),
+    },
+    handler: async (ctx, { orgId, entryIds }) => {
+        const userId = await requireAuth(ctx);
+        const membership = await requireMembership(ctx, userId, orgId);
+        const { entries, skipped } = await loadBatch(ctx, orgId, entryIds);
+        const result = await applyStatusBatch(
+            ctx,
+            { userId, role: membership.role },
+            entries,
+            "submit",
+        );
+        return { applied: result.applied, skipped: [...skipped, ...result.skipped] };
+    },
+});
+
+export const approveDays = mutation({
+    args: {
+        orgId: v.id("organizations"),
+        entryIds: v.array(v.id("timeEntries")),
+    },
+    handler: async (ctx, { orgId, entryIds }) => {
+        const userId = await requireAuth(ctx);
+        await requireAdmin(ctx, userId, orgId);
+        const { entries, skipped } = await loadBatch(ctx, orgId, entryIds);
+        const result = await applyStatusBatch(
+            ctx,
+            { userId, role: "admin" },
+            entries,
+            "approve",
+        );
+        return { applied: result.applied, skipped: [...skipped, ...result.skipped] };
+    },
+});
+
+export const rejectDays = mutation({
+    args: {
+        orgId: v.id("organizations"),
+        entryIds: v.array(v.id("timeEntries")),
+        reason: v.optional(v.string()),
+    },
+    handler: async (ctx, { orgId, entryIds, reason }) => {
+        const userId = await requireAuth(ctx);
+        await requireAdmin(ctx, userId, orgId);
+        const { entries, skipped } = await loadBatch(ctx, orgId, entryIds);
+        const result = await applyStatusBatch(
+            ctx,
+            { userId, role: "admin" },
+            entries,
+            "reject",
+            reason,
+        );
+        return { applied: result.applied, skipped: [...skipped, ...result.skipped] };
+    },
+});
+
+export const lockDays = mutation({
+    args: {
+        orgId: v.id("organizations"),
+        entryIds: v.array(v.id("timeEntries")),
+    },
+    handler: async (ctx, { orgId, entryIds }) => {
+        const userId = await requireAuth(ctx);
+        await requireAdmin(ctx, userId, orgId);
+        const { entries, skipped } = await loadBatch(ctx, orgId, entryIds);
+        const result = await applyStatusBatch(
+            ctx,
+            { userId, role: "admin" },
+            entries,
+            "lock",
+        );
+        return { applied: result.applied, skipped: [...skipped, ...result.skipped] };
     },
 });

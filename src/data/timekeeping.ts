@@ -16,4 +16,5 @@ export const TIME_ENTRY_STATUSES = [
   { value: "submitted", label: "Submitted" },
   { value: "approved", label: "Approved" },
   { value: "rejected", label: "Rejected" },
+  { value: "locked", label: "Locked" },
 ] as const;
