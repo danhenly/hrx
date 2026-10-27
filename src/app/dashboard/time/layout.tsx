@@ -20,11 +20,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           <NavActions />
         </AppHeaderActions>
       </AppHeader>
-      {/* overflow-y-auto is the fallback for nested routes that use a plain
-                SectionGroup (entries); the timesheet grid scrolls in ModuleBody. */}
-      <main className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-        {children}
-      </main>
+      <main className="flex min-h-0 flex-1 flex-col">{children}</main>
     </ModuleFrame>
   );
 }
