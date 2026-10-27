@@ -121,33 +121,6 @@ export default defineSchema({
     // ─── Timekeeping ────────────────────────────────────────────────────────
 
     /**
-     * Timesheets — weekly submission per employee.
-     */
-    timesheets: defineTable({
-        orgId: v.id("organizations"),
-        employeeId: v.id("employees"),
-        weekStart: v.number(), // Unix ms start-of-week
-        status: v.union(
-            v.literal("open"),
-            v.literal("submitted"),
-            v.literal("approved"),
-            v.literal("rejected"),
-            v.literal("locked"),
-        ),
-        submittedAt: v.optional(v.number()),
-        approvedAt: v.optional(v.number()),
-        approvedBy: v.optional(v.id("users")),
-        rejectedReason: v.optional(v.string()),
-        totalMinutes: v.optional(v.number()),
-        lockedAt: v.optional(v.number()),           // when the week became immutable
-        lockedBy: v.optional(v.id("users")),        // who locked it
-    })
-        .index("by_org", ["orgId"])
-        .index("by_org_employee", ["orgId", "employeeId"])
-        .index("by_org_week", ["orgId", "weekStart"])
-        .index("by_org_employee_week", ["orgId", "employeeId", "weekStart"]),
-
-    /**
      * Time entries — per employee per day with up to 3 intervals.
      */
     timeEntries: defineTable({
@@ -172,7 +145,6 @@ export default defineSchema({
             v.literal("locked"), // frozen for payroll; replaces the week sheet's state
         ),
         rejectedReason: v.optional(v.string()),
-        timesheetId: v.optional(v.id("timesheets")), // legacy; no longer written
         submittedAt: v.optional(v.number()),
         approvedAt: v.optional(v.number()),
         approvedBy: v.optional(v.id("users")),
@@ -183,8 +155,7 @@ export default defineSchema({
     })
         .index("by_org", ["orgId"])
         .index("by_org_employee_date", ["orgId", "employeeId", "date"])
-        .index("by_org_date", ["orgId", "date"])
-        .index("by_timesheet", ["timesheetId"]),     // optional field, drafts excluded
+        .index("by_org_date", ["orgId", "date"]),
 
     // ─── Audit ──────────────────────────────────────────────────────────────
 

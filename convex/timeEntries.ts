@@ -161,8 +161,7 @@ async function loadBatch(
 }
 
 /**
- * The only place a day transition is applied. Shared with the legacy week
- * wrappers in `timesheets.ts` so the guards exist in exactly one place.
+ * The only place a day transition is applied: guards, patch and audit.
  */
 export async function applyStatusBatch(
     ctx: MutationCtx,
