@@ -12,11 +12,3 @@ export const ENTRY_STATUS_LABELS: Record<TimeEntry["status"], string> = {
   rejected: "Rejected",
   locked: "Locked",
 };
-
-export const TIME_ENTRY_STATUSES = [
-  { value: "draft", label: "Draft" },
-  { value: "submitted", label: "Submitted" },
-  { value: "approved", label: "Approved" },
-  { value: "rejected", label: "Rejected" },
-  { value: "locked", label: "Locked" },
-] as const;
