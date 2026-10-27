@@ -19,7 +19,6 @@ import type * as lib_week from "../lib/week.js";
 import type * as organizations from "../organizations.js";
 import type * as positions from "../positions.js";
 import type * as timeEntries from "../timeEntries.js";
-import type * as timesheets from "../timesheets.js";
 import type * as users from "../users.js";
 
 import type {
@@ -40,7 +39,6 @@ declare const fullApi: ApiFromModules<{
   organizations: typeof organizations;
   positions: typeof positions;
   timeEntries: typeof timeEntries;
-  timesheets: typeof timesheets;
   users: typeof users;
 }>;
 
