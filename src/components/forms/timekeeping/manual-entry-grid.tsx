@@ -75,7 +75,15 @@ export function ManualEntryGrid({
             rejectedReason: entry.rejectedReason,
         }));
         setRows((current) => {
-            const unsaved = current.filter((row) => !row.entryId);
+            // A local row is only worth keeping while the server has no row for
+            // the same employee+day. Comparing on that key (not on entryId alone)
+            // is what stops a just-saved row from appearing twice: the save path
+            // has no id until the query comes back.
+            const serverKeys = new Set(mapped.map((row) => `${row.employeeId}|${row.date}`));
+            const unsaved = current.filter(
+                (row) =>
+                    !row.entryId && !serverKeys.has(`${row.employeeId}|${row.date}`),
+            );
             return [...mapped, ...unsaved];
         });
     }, [entries]);
@@ -120,13 +128,20 @@ export function ManualEntryGrid({
 
         startTransition(async () => {
             try {
-                await upsert({
+                const entryId = await upsert({
                     orgId,
                     employeeId: row.employeeId as Id<"employees">,
                     date: dateMs,
                     intervals,
                     notes: row.notes || undefined,
                 });
+                // Adopt the server id immediately so this row stops counting as
+                // "unsaved" -- otherwise the refetch adds a second copy of it.
+                updateRow(row.localId, (current) => ({
+                    ...current,
+                    entryId,
+                    status: current.status ?? "draft",
+                }));
                 toast.success("Entry saved");
             } catch (err) {
                 toast.error((err as Error).message ?? "Failed to save entry");
@@ -143,6 +158,7 @@ export function ManualEntryGrid({
         startTransition(async () => {
             try {
                 await submitEntry({ entryId });
+                updateRow(row.localId, (current) => ({ ...current, status: "submitted" }));
                 toast.success("Entry submitted");
             } catch (err) {
                 toast.error((err as Error).message ?? "Failed to submit entry");
