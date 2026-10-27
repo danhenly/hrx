@@ -5,6 +5,7 @@ import * as React from "react";
 import { Kbd } from "@/components/common/kbd";
 import { NavOverview } from "@/components/nav/nav-overview";
 import { NavUser } from "@/components/nav/nav-user";
+import { SidebarResizer } from "@/components/nav/sidebar-resizer";
 import { OrganizationSwitcher } from "@/components/nav/organization-switcher";
 import {
   Sidebar,
@@ -56,6 +57,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       <SidebarFooter className="border-t">
         <NavUser />
       </SidebarFooter>
+      <SidebarResizer />
       <SidebarRail />
     </Sidebar>
   );

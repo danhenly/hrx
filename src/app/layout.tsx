@@ -6,6 +6,7 @@ import PlausibleProvider from "next-plausible";
 import { TailwindIndicator } from "@/components/tailwind-indicator";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
+import { SIDEBAR_WIDTH_SCRIPT } from "@/lib/sidebar";
 import { ConvexClientProvider } from "@/providers/convex-provider";
 import { defaultMetadata, ogMetadata, twitterMetadata } from "./metadata";
 
@@ -40,6 +41,10 @@ export default function RootLayout({
         <body
           className={`${geistSans.variable} ${geistMono.variable} antialiased`}
         >
+          <script
+            // Restores a stored sidebar width before first paint.
+            dangerouslySetInnerHTML={{ __html: SIDEBAR_WIDTH_SCRIPT }}
+          />
           <PlausibleProvider domain="template.openstatus.dev">
             <ThemeProvider
               attribute="class"

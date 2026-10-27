@@ -231,6 +231,13 @@
   }
 }
 
+/* Sidebar drag: keep the cursor consistent and stop text selection. */
+html[data-sidebar-resizing],
+html[data-sidebar-resizing] * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+
 /* typography */
 
 ::selection {
