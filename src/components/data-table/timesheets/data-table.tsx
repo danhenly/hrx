@@ -4,6 +4,8 @@ import {
   flexRender,
   getCoreRowModel,
   getSortedRowModel,
+  type OnChangeFn,
+  type RowSelectionState,
   type SortingState,
   useReactTable,
 } from "@tanstack/react-table";
@@ -26,6 +28,8 @@ interface TimesheetsDataTableProps {
   activeId?: string;
   onOpen: (timesheet: Timesheet) => void;
   renderActions?: (timesheet: Timesheet) => React.ReactNode;
+  rowSelection?: RowSelectionState;
+  onRowSelectionChange?: OnChangeFn<RowSelectionState>;
 }
 
 export function TimesheetsDataTable({
@@ -34,6 +38,8 @@ export function TimesheetsDataTable({
   activeId,
   onOpen,
   renderActions,
+  rowSelection,
+  onRowSelectionChange,
 }: TimesheetsDataTableProps) {
   const [sorting, setSorting] = useState<SortingState>([
     { id: "weekStart", desc: true },
@@ -47,8 +53,11 @@ export function TimesheetsDataTable({
   const table = useReactTable({
     data: timesheets,
     columns,
-    state: { sorting },
+    state: { sorting, rowSelection: rowSelection ?? {} },
     onSortingChange: setSorting,
+    onRowSelectionChange,
+    enableRowSelection: true,
+    getRowId: (row) => row._id,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
   });

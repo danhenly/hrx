@@ -1,5 +1,6 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { TIMESHEET_STATUS_LABELS, type Timesheet } from "@/data/timekeeping";
 import { formatDuration, formatWeekRange } from "@/lib/week-display";
 
@@ -13,6 +14,31 @@ export function timesheetColumns(
   renderActions?: (timesheet: Timesheet) => React.ReactNode,
 ): ColumnDef<Timesheet>[] {
   return [
+    {
+      id: "select",
+      header: ({ table }) => (
+        <Checkbox
+          checked={
+            table.getIsAllPageRowsSelected()
+              ? true
+              : table.getIsSomePageRowsSelected()
+                ? "indeterminate"
+                : false
+          }
+          onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
+          aria-label="Select all timesheets"
+        />
+      ),
+      enableSorting: false,
+      cell: ({ row }) => (
+        <Checkbox
+          checked={row.getIsSelected()}
+          onCheckedChange={(value) => row.toggleSelected(!!value)}
+          onClick={(event) => event.stopPropagation()}
+          aria-label={`Select ${employeesById[row.original.employeeId] ?? "timesheet"}`}
+        />
+      ),
+    },
     {
       accessorKey: "employeeId",
       id: "employee",
