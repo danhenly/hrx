@@ -17,6 +17,7 @@ import type * as http from "../http.js";
 import type * as invitations from "../invitations.js";
 import type * as lib_week from "../lib/week.js";
 import type * as organizations from "../organizations.js";
+import type * as positions from "../positions.js";
 import type * as timeEntries from "../timeEntries.js";
 import type * as timesheets from "../timesheets.js";
 import type * as users from "../users.js";
@@ -37,6 +38,7 @@ declare const fullApi: ApiFromModules<{
   invitations: typeof invitations;
   "lib/week": typeof lib_week;
   organizations: typeof organizations;
+  positions: typeof positions;
   timeEntries: typeof timeEntries;
   timesheets: typeof timesheets;
   users: typeof users;

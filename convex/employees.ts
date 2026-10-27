@@ -1,4 +1,5 @@
 import { ConvexError, v } from "convex/values";
+import type { Doc } from "./_generated/dataModel";
 import { logAudit } from "./audit";
 import { mutation, query } from "./_generated/server";
 import { requireAdmin, requireAuth, requireMembership } from "./helpers";
@@ -182,17 +183,25 @@ export const remove = mutation({
 export const addPosition = mutation({
     args: {
         employeeId: v.id("employees"),
-        jobTitle: v.string(),
-        department: v.optional(v.string()),
+        positionId: v.id("positions"),
         salary: v.optional(v.number()),
         effectiveDate: v.number(),
         notes: v.optional(v.string()),
     },
-    handler: async (ctx, { employeeId, ...fields }) => {
+    handler: async (ctx, { employeeId, positionId, ...fields }) => {
         const userId = await requireAuth(ctx);
         const employee = await ctx.db.get(employeeId);
         if (!employee) throw new ConvexError("Employee not found");
         await requireMembership(ctx, userId, employee.orgId);
+
+        const masterPosition = await ctx.db.get(positionId);
+        if (!masterPosition) throw new ConvexError("Position not found");
+        if (masterPosition.orgId !== employee.orgId) {
+            throw new ConvexError("Position is not in this organisation");
+        }
+        if (!masterPosition.isActive) {
+            throw new ConvexError("Position is inactive — reactivate it or add a new one");
+        }
 
         // Latest position by effectiveDate (index covers the sort; no scan).
         const latest = await ctx.db
@@ -221,9 +230,12 @@ export const addPosition = mutation({
             throw new ConvexError("Salary cannot be negative");
         }
 
-        const positionId = await ctx.db.insert("employeePositions", {
+        const positionRowId = await ctx.db.insert("employeePositions", {
             orgId: employee.orgId,
             employeeId,
+            positionId,
+            jobTitle: masterPosition.name,          // snapshot — history must not follow renames
+            department: masterPosition.department,  // snapshot
             ...fields,
         });
         await logAudit(ctx, {
@@ -231,9 +243,9 @@ export const addPosition = mutation({
             actorId: userId,
             action: "employeePosition.create",
             entityType: "employeePositions",
-            entityId: positionId,
+            entityId: positionRowId,
         });
-        return positionId;
+        return positionRowId;
     },
 });
 
@@ -243,14 +255,13 @@ export const addPosition = mutation({
 export const updatePosition = mutation({
     args: {
         positionId: v.id("employeePositions"),
-        jobTitle: v.optional(v.string()),
-        department: v.optional(v.string()),
+        positionRefId: v.optional(v.id("positions")),
         salary: v.optional(v.number()),
         effectiveDate: v.optional(v.number()),
         endDate: v.optional(v.number()),
         notes: v.optional(v.string()),
     },
-    handler: async (ctx, { positionId, ...fields }) => {
+    handler: async (ctx, { positionId, positionRefId, ...fields }) => {
         const userId = await requireAuth(ctx);
         const position = await ctx.db.get(positionId);
         if (!position) throw new ConvexError("Position not found");
@@ -263,7 +274,30 @@ export const updatePosition = mutation({
         if (fields.salary !== undefined && fields.salary < 0) {
             throw new ConvexError("Salary cannot be negative");
         }
-        await ctx.db.patch(positionId, fields);
+
+        // Typed patch — a Record<string, unknown> would not satisfy ctx.db.patch.
+        const patch: Partial<Doc<"employeePositions">> = {};
+
+        if (positionRefId !== undefined) {
+            const target = await ctx.db.get(positionRefId);
+            if (!target) throw new ConvexError("Position not found");
+            if (target.orgId !== position.orgId) {
+                throw new ConvexError("Position is not in this organisation");
+            }
+            if (!target.isActive && target._id !== position.positionId) {
+                throw new ConvexError("Position is inactive — reactivate it first");
+            }
+            patch.positionId = target._id;
+            patch.jobTitle = target.name;      // re-snapshot on a deliberate correction
+            patch.department = target.department;
+        }
+
+        if (fields.salary !== undefined) patch.salary = fields.salary;
+        if (fields.effectiveDate !== undefined) patch.effectiveDate = fields.effectiveDate;
+        if (fields.endDate !== undefined) patch.endDate = fields.endDate;
+        if (fields.notes !== undefined) patch.notes = fields.notes;
+
+        if (Object.keys(patch).length > 0) await ctx.db.patch(positionId, patch);
         await logAudit(ctx, {
             orgId: position.orgId,
             actorId: userId,
