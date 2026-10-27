@@ -1,8 +1,9 @@
 "use client";
 
-import { useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
+import { toast } from "sonner";
 import { TimesheetsDataTable } from "@/components/data-table/timesheets/data-table";
 import { TimesheetSheet } from "@/components/forms/timekeeping/timesheet-sheet";
 import {
@@ -42,6 +43,98 @@ export default function TimePage() {
   const [weekStart, setWeekStart] = useState(() => weekStartOf(Date.now()));
   const [status, setStatus] = useState<string>("all");
   const [selected, setSelected] = useState<Timesheet | null>(null);
+  const [isPending, startTransition] = useTransition();
+
+  const me = useQuery(api.users.getMe);
+  const isAdmin = me?.membership?.role === "admin";
+
+  const submitWeek = useMutation(api.timesheets.submitForWeek);
+  const approveSheet = useMutation(api.timesheets.approve);
+  const lockSheet = useMutation(api.timesheets.lock);
+
+  function runAction(action: () => Promise<unknown>, message: string) {
+    startTransition(async () => {
+      try {
+        await action();
+        toast.success(message);
+      } catch (err) {
+        toast.error((err as Error).message ?? "Action failed");
+      }
+    });
+  }
+
+  /**
+   * Lifecycle actions live on the row, mirroring the server guards: submit is
+   * open to members, approve/lock are admin-only. The buttons never re-implement
+   * permission checks -- they only avoid offering what the server would reject.
+   */
+  function renderActions(sheet: Timesheet) {
+    const stop = (event: React.MouseEvent) => event.stopPropagation();
+
+    if (sheet.status === "open" || sheet.status === "rejected") {
+      return (
+        <Button
+          size="sm"
+          variant="secondary"
+          disabled={isPending}
+          onClick={(event) => {
+            stop(event);
+            if (!orgId) return;
+            runAction(
+              () =>
+                submitWeek({
+                  orgId,
+                  employeeId: sheet.employeeId,
+                  weekStart: sheet.weekStart,
+                }),
+              "Week submitted",
+            );
+          }}
+        >
+          Submit
+        </Button>
+      );
+    }
+
+    if (sheet.status === "submitted" && isAdmin) {
+      return (
+        <Button
+          size="sm"
+          disabled={isPending}
+          onClick={(event) => {
+            stop(event);
+            runAction(
+              () => approveSheet({ timesheetId: sheet._id }),
+              "Week approved",
+            );
+          }}
+        >
+          Approve
+        </Button>
+      );
+    }
+
+    if (sheet.status === "approved" && isAdmin) {
+      return (
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={isPending}
+          onClick={(event) => {
+            stop(event);
+            runAction(
+              () => lockSheet({ timesheetId: sheet._id }),
+              "Week locked",
+            );
+          }}
+        >
+          Lock
+        </Button>
+      );
+    }
+
+    return null;
+  }
 
   const timesheets = useQuery(
     api.timesheets.listForOrg,
@@ -83,6 +176,11 @@ export default function TimePage() {
     timesheets?.filter((s) => s.status === "approved").length ?? 0;
   const isLoading =
     !orgId || timesheets === undefined || employees === undefined;
+
+  // Actions mutate the row, so the open sheet must read the refetched document,
+  // not the snapshot captured when it was opened.
+  const activeSheet =
+    timesheets?.find((sheet) => sheet._id === selected?._id) ?? selected;
 
   return (
     <>
@@ -144,6 +242,7 @@ export default function TimePage() {
             employeesById={employeesById}
             activeId={selected?._id}
             onOpen={setSelected}
+            renderActions={renderActions}
           />
         )}
       </ModuleBody>
@@ -163,7 +262,8 @@ export default function TimePage() {
       {orgId ? (
         <TimesheetSheet
           orgId={orgId}
-          timesheet={selected}
+          timesheet={activeSheet}
+          footer={activeSheet ? renderActions(activeSheet) : null}
           open={selected !== null}
           onOpenChange={(open) => {
             if (!open) setSelected(null);

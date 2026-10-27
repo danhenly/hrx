@@ -10,6 +10,7 @@ import { formatDuration, formatWeekRange } from "@/lib/week-display";
  */
 export function timesheetColumns(
   employeesById: Record<string, string>,
+  renderActions?: (timesheet: Timesheet) => React.ReactNode,
 ): ColumnDef<Timesheet>[] {
   return [
     {
@@ -58,7 +59,11 @@ export function timesheetColumns(
       id: "actions",
       header: () => <span className="sr-only">Actions</span>,
       enableSorting: false,
-      cell: () => null,
+      cell: ({ row }) => (
+        <div className="flex justify-end gap-1">
+          {renderActions?.(row.original)}
+        </div>
+      ),
     },
   ];
 }

@@ -1,9 +1,10 @@
 import { ConvexError, v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
+import type { Doc } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
 import { mutation, query } from "./_generated/server";
 import { logAudit } from "./audit";
-import { weekStartOf } from "./lib/week";
+import { WEEK_MS, weekStartOf } from "./lib/week";
 import { requireAdmin, requireAuth, requireMembership } from "./helpers";
 
 async function assertEmployeeOrg(ctx: any, orgId: any, employeeId: any) {
@@ -49,7 +50,7 @@ export const listForOrg = query({
     },
 });
 
-async function ensureTimesheet(
+export async function ensureTimesheet(
     ctx: MutationCtx,
     orgId: Id<"organizations">,
     employeeId: Id<"employees">,
@@ -73,6 +74,119 @@ async function ensureTimesheet(
     if (!created) throw new ConvexError("Failed to create timesheet");
     return created;
 }
+
+/** All entries for one employee-week, in date order. */
+export async function weekEntriesFor(
+    ctx: MutationCtx,
+    orgId: Id<"organizations">,
+    employeeId: Id<"employees">,
+    weekStart: number,
+) {
+    return ctx.db
+        .query("timeEntries")
+        .withIndex("by_org_employee_date", (q) =>
+            q.eq("orgId", orgId)
+                .eq("employeeId", employeeId)
+                .gte("date", weekStart)
+                .lt("date", weekStart + WEEK_MS),
+        )
+        .collect();
+}
+
+/**
+ * Materialise the sheet for a week and keep its total honest. Called whenever an
+ * entry is written or removed, so a week with drafts *has* a timesheet row for
+ * the Timesheets page to list (previously nothing ever created one, which is why
+ * drafts and submitted weeks were invisible there).
+ */
+export async function syncSheetForWeek(
+    ctx: MutationCtx,
+    orgId: Id<"organizations">,
+    employeeId: Id<"employees">,
+    weekStart: number,
+) {
+    const sheet = await ensureTimesheet(ctx, orgId, employeeId, weekStart);
+    // Frozen states keep the total they were approved with; edits are blocked
+    // before they can reach here, so this is defence in depth only.
+    if (!["open", "rejected"].includes(sheet.status)) return sheet;
+
+    const entries = await weekEntriesFor(ctx, orgId, employeeId, weekStart);
+    const totalMinutes = entries.reduce((sum, entry) => sum + entry.totalMinutes, 0);
+    if (sheet.totalMinutes !== totalMinutes) {
+        await ctx.db.patch(sheet._id, { totalMinutes });
+    }
+    return sheet;
+}
+
+/** Shared submit path: total the week, then flip the sheet and every child together. */
+async function submitWeekInternal(
+    ctx: MutationCtx,
+    userId: Id<"users">,
+    sheet: Doc<"timesheets">,
+) {
+    const entries = await weekEntriesFor(
+        ctx,
+        sheet.orgId,
+        sheet.employeeId,
+        sheet.weekStart,
+    );
+    if (entries.length === 0) throw new ConvexError("No time entries for this week");
+
+    const editable = entries.filter(
+        (entry) => entry.status === "draft" || entry.status === "rejected",
+    );
+    if (editable.length !== entries.length) {
+        throw new ConvexError("Some entries in this week are already submitted or approved");
+    }
+
+    const totalMinutes = entries.reduce((sum, entry) => sum + entry.totalMinutes, 0);
+    const now = Date.now();
+
+    for (const entry of entries) {
+        await ctx.db.patch(entry._id, {
+            status: "submitted",
+            timesheetId: sheet._id,
+            rejectedReason: undefined,
+            updatedBy: userId,
+        });
+    }
+
+    await ctx.db.patch(sheet._id, {
+        status: "submitted",
+        submittedAt: now,
+        totalMinutes,
+        rejectedReason: undefined,
+    });
+
+    await logAudit(ctx, {
+        orgId: sheet.orgId,
+        actorId: userId,
+        action: "timesheet.submit",
+        entityType: "timesheets",
+        entityId: sheet._id,
+    });
+}
+
+export const submitForWeek = mutation({
+    args: {
+        orgId: v.id("organizations"),
+        employeeId: v.id("employees"),
+        weekStart: v.number(),
+    },
+    handler: async (ctx, { orgId, employeeId, weekStart }) => {
+        const userId = await requireAuth(ctx);
+        await requireMembership(ctx, userId, orgId);
+        await assertEmployeeOrg(ctx, orgId, employeeId);
+
+        const week = weekStartOf(weekStart);
+        const sheet = await ensureTimesheet(ctx, orgId, employeeId, week);
+        if (!["open", "rejected"].includes(sheet.status)) {
+            throw new ConvexError(`This week is already ${sheet.status}`);
+        }
+        await submitWeekInternal(ctx, userId, sheet);
+        return sheet._id;
+    },
+});
 
 export const getOrCreate = mutation({
     args: {
@@ -123,12 +237,9 @@ export const submit = mutation({
         if (!["open", "rejected"].includes(timesheet.status)) {
             throw new ConvexError("Only open or rejected timesheets can be submitted");
         }
-        // Members can submit their org's timesheets; admins may also submit on behalf of others.
-        await ctx.db.patch(timesheetId, {
-            status: "submitted",
-            submittedAt: Date.now(),
-            rejectedReason: undefined,
-        });
+        // Same transactional path as submitForWeek: total the week and mirror the
+        // status onto every entry, instead of flipping the sheet alone.
+        await submitWeekInternal(ctx, userId, timesheet);
     },
 });
 
@@ -142,10 +253,30 @@ export const approve = mutation({
         if (timesheet.status !== "submitted") {
             throw new ConvexError("Only submitted timesheets can be approved");
         }
+        const entries = await ctx.db
+            .query("timeEntries")
+            .withIndex("by_timesheet", (q) => q.eq("timesheetId", timesheetId))
+            .collect();
+        if (entries.length === 0) {
+            throw new ConvexError("Timesheet has no entries to approve");
+        }
+
+        const now = Date.now();
+        for (const entry of entries) {
+            await ctx.db.patch(entry._id, {
+                status: "approved",
+                rejectedReason: undefined,
+                updatedBy: userId,
+            });
+        }
+
         await ctx.db.patch(timesheetId, {
             status: "approved",
-            approvedAt: Date.now(),
+            approvedAt: now,
             approvedBy: userId,
+            // Recomputed from the children: approve is the last moment stale
+            // totals can be caught.
+            totalMinutes: entries.reduce((sum, entry) => sum + entry.totalMinutes, 0),
             rejectedReason: undefined,
         });
 
@@ -169,6 +300,18 @@ export const reject = mutation({
         if (timesheet.status !== "submitted") {
             throw new ConvexError("Only submitted timesheets can be rejected");
         }
+        const entries = await ctx.db
+            .query("timeEntries")
+            .withIndex("by_timesheet", (q) => q.eq("timesheetId", timesheetId))
+            .collect();
+        for (const entry of entries) {
+            await ctx.db.patch(entry._id, {
+                status: "rejected",
+                rejectedReason: reason,
+                updatedBy: userId,
+            });
+        }
+
         await ctx.db.patch(timesheetId, {
             status: "rejected",
             rejectedReason: reason,

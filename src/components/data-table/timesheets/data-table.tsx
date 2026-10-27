@@ -25,6 +25,7 @@ interface TimesheetsDataTableProps {
   employeesById: Record<string, string>;
   activeId?: string;
   onOpen: (timesheet: Timesheet) => void;
+  renderActions?: (timesheet: Timesheet) => React.ReactNode;
 }
 
 export function TimesheetsDataTable({
@@ -32,14 +33,15 @@ export function TimesheetsDataTable({
   employeesById,
   activeId,
   onOpen,
+  renderActions,
 }: TimesheetsDataTableProps) {
   const [sorting, setSorting] = useState<SortingState>([
     { id: "weekStart", desc: true },
   ]);
 
   const columns = useMemo(
-    () => timesheetColumns(employeesById),
-    [employeesById],
+    () => timesheetColumns(employeesById, renderActions),
+    [employeesById, renderActions],
   );
 
   const table = useReactTable({
