@@ -59,7 +59,6 @@ export function ManualEntryGrid({
     const [isPending, startTransition] = useTransition();
 
     const upsert = useMutation(api.timeEntries.upsertForDay);
-    const submitEntry = useMutation(api.timeEntries.submit);
     const deleteDraft = useMutation(api.timeEntries.deleteDraft);
 
     // Keep UI rows in sync with server entries for the selected week.
@@ -145,23 +144,6 @@ export function ManualEntryGrid({
                 toast.success("Entry saved");
             } catch (err) {
                 toast.error((err as Error).message ?? "Failed to save entry");
-            }
-        });
-    }
-
-    function handleSubmit(row: RowState) {
-        if (!row.entryId) {
-            toast.error("Save the entry before submitting");
-            return;
-        }
-        const entryId = row.entryId;
-        startTransition(async () => {
-            try {
-                await submitEntry({ entryId });
-                updateRow(row.localId, (current) => ({ ...current, status: "submitted" }));
-                toast.success("Entry submitted");
-            } catch (err) {
-                toast.error((err as Error).message ?? "Failed to submit entry");
             }
         });
     }
@@ -303,14 +285,7 @@ export function ManualEntryGrid({
                                         >
                                             Save
                                         </Button>
-                                        <Button
-                                            variant="secondary"
-                                            size="sm"
-                                            onClick={() => handleSubmit(row)}
-                                            disabled={isPending || row.status === "submitted" || row.status === "approved"}
-                                        >
-                                            Submit
-                                        </Button>
+                                        
                                         <Button
                                             variant="ghost"
                                             size="sm"
