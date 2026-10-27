@@ -27,8 +27,8 @@ import { api } from "../../../../../convex/_generated/api";
 import type { Id } from "../../../../../convex/_generated/dataModel";
 
 export default function PositionsPage() {
-  const me = useQuery(api.users.getMe);
   const { orgId } = useActiveOrg();
+  const me = useQuery(api.users.getMe, orgId ? { orgId } : {});
   const positions = useQuery(
     api.positions.list,
     orgId ? { orgId, includeInactive: true } : "skip",
