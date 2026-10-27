@@ -1,52 +1,61 @@
 "use client";
 
-import Link from "next/link";
-import { addDays, format } from "date-fns";
-import { useMemo } from "react";
 import { useQuery } from "convex/react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useMemo, useState } from "react";
+import { TimesheetsDataTable } from "@/components/data-table/timesheets/data-table";
+import { TimesheetSheet } from "@/components/forms/timekeeping/timesheet-sheet";
 import {
-  Section,
-  SectionGroup,
-  SectionHeader,
-  SectionTitle,
-} from "@/components/content/section";
-import { FormCard, FormCardContent } from "@/components/forms/form-card";
+  ModuleBody,
+  ModuleStat,
+  ModuleStatFooter,
+  ModuleToolbar,
+} from "@/components/layout/module";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Employee } from "@/data/employees";
-import type { Timesheet } from "@/data/timekeeping";
-import { api } from "../../../../convex/_generated/api";
+import type { TimeEntry, Timesheet } from "@/data/timekeeping";
+import { WEEK_MS, weekStartOf } from "@/lib/week";
+import { formatDuration, formatWeekRange } from "@/lib/week-display";
 import { useActiveOrg } from "@/providers/org-provider";
+import { api } from "../../../../convex/_generated/api";
 
-const STATUS_SUMMARY = [
-  {
-    key: "open",
-    label: "Draft",
-    description: "Being filled out or still editable.",
-  },
-  {
-    key: "submitted",
-    label: "Submitted",
-    description: "Awaiting approval from administrators.",
-  },
-  {
-    key: "approved",
-    label: "Approved",
-    description: "Finalized and locked in the ledger.",
-  },
-];
+const STATUS_FILTERS = [
+  { value: "all", label: "All statuses" },
+  { value: "open", label: "Draft" },
+  { value: "submitted", label: "Submitted" },
+  { value: "approved", label: "Approved" },
+  { value: "rejected", label: "Rejected" },
+  { value: "locked", label: "Locked" },
+] as const;
 
 export default function TimePage() {
   const { orgId } = useActiveOrg();
 
+  const [weekStart, setWeekStart] = useState(() => weekStartOf(Date.now()));
+  const [status, setStatus] = useState<string>("all");
+  const [selected, setSelected] = useState<Timesheet | null>(null);
+
   const timesheets = useQuery(
     api.timesheets.listForOrg,
-    orgId ? { orgId } : "skip",
+    orgId ? { orgId, weekStart } : "skip",
   ) as Timesheet[] | undefined;
   const employees = useQuery(api.employees.list, orgId ? { orgId } : "skip") as
     | Employee[]
     | undefined;
+  const weekEntries = useQuery(
+    api.timeEntries.listByDateRange,
+    orgId
+      ? { orgId, startDate: weekStart, endDate: weekStart + WEEK_MS - 1 }
+      : "skip",
+  ) as TimeEntry[] | undefined;
 
   const employeesById = useMemo(() => {
     if (!employees) return {};
@@ -56,98 +65,111 @@ export default function TimePage() {
     }, {});
   }, [employees]);
 
-  const grouped = useMemo(() => {
+  const visible = useMemo(() => {
     if (!timesheets) return [];
-    return STATUS_SUMMARY.map((status) => ({
-      ...status,
-      items: timesheets.filter((sheet) => sheet.status === status.key),
-    }));
-  }, [timesheets]);
+    return status === "all"
+      ? timesheets
+      : timesheets.filter((sheet) => sheet.status === status);
+  }, [timesheets, status]);
 
-  const isLoading = !orgId || !timesheets || !employees;
+  const loggedMinutes = useMemo(
+    () => weekEntries?.reduce((sum, entry) => sum + entry.totalMinutes, 0),
+    [weekEntries],
+  );
+
+  const awaiting =
+    timesheets?.filter((s) => s.status === "submitted").length ?? 0;
+  const approved =
+    timesheets?.filter((s) => s.status === "approved").length ?? 0;
+  const isLoading =
+    !orgId || timesheets === undefined || employees === undefined;
 
   return (
-    <SectionGroup>
-      <Section>
-        <SectionHeader className="sm:flex-row sm:items-center sm:justify-between">
-          <SectionTitle>Timesheets</SectionTitle>
-          <Button size="sm" variant="secondary" asChild>
-            <Link href="/dashboard/time/entries">Log time entries</Link>
+    <>
+      <ModuleToolbar>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="outline"
+            size="icon"
+            aria-label="Previous week"
+            onClick={() => setWeekStart((current) => current - WEEK_MS)}
+          >
+            <ChevronLeft className="h-4 w-4" />
           </Button>
-        </SectionHeader>
-        <FormCard>
-          <FormCardContent className="space-y-6">
-            {isLoading ? (
-              <div className="space-y-3">
-                <Skeleton className="h-5 w-40" />
-                <Skeleton className="h-48 w-full" />
-              </div>
-            ) : (
-              <div className="space-y-6">
-                <div className="grid gap-4 md:grid-cols-3">
-                  {grouped.map((group) => (
-                    <div key={group.key} className="rounded-lg border p-4">
-                      <div className="flex items-center justify-between gap-4">
-                        <div>
-                          <p className="text-sm font-semibold">{group.label}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {group.description}
-                          </p>
-                        </div>
-                        <Badge variant="outline">
-                          {group.items.length} rows
-                        </Badge>
-                      </div>
-                      <ul className="mt-4 space-y-3 text-sm">
-                        {group.items.slice(0, 3).map((row) => (
-                          <li
-                            key={row._id}
-                            className="flex items-center justify-between gap-3"
-                          >
-                            <div className="flex flex-col">
-                              <span className="font-medium">
-                                {employeesById[row.employeeId] ?? "Unknown"}
-                              </span>
-                              <span className="text-xs text-muted-foreground">
-                                {formatWeekRange(row.weekStart)}
-                              </span>
-                            </div>
-                            <span className="text-xs text-muted-foreground">
-                              {formatDuration(row.totalMinutes)}
-                            </span>
-                          </li>
-                        ))}
-                        {group.items.length === 0 ? (
-                          <p className="text-xs text-muted-foreground">
-                            No {group.label.toLowerCase()} timesheets.
-                          </p>
-                        ) : group.items.length > 3 ? (
-                          <p className="text-xs text-muted-foreground">
-                            Showing 3 of {group.items.length}
-                          </p>
-                        ) : null}
-                      </ul>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </FormCardContent>
-        </FormCard>
-      </Section>
-    </SectionGroup>
+          <span className="min-w-[190px] px-2 font-medium text-sm tabular-nums">
+            {formatWeekRange(weekStart)}
+          </span>
+          <Button
+            variant="outline"
+            size="icon"
+            aria-label="Next week"
+            onClick={() => setWeekStart((current) => current + WEEK_MS)}
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setWeekStart(weekStartOf(Date.now()))}
+          >
+            This week
+          </Button>
+        </div>
+
+        <Select value={status} onValueChange={setStatus}>
+          <SelectTrigger className="w-[160px]" aria-label="Filter by status">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {STATUS_FILTERS.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </ModuleToolbar>
+
+      <ModuleBody>
+        {isLoading ? (
+          <div className="space-y-3 px-(--page-gutter) py-4">
+            <Skeleton className="h-9 w-full" />
+            <Skeleton className="h-[42px] w-full" />
+            <Skeleton className="h-[42px] w-full" />
+            <Skeleton className="h-[42px] w-full" />
+          </div>
+        ) : (
+          <TimesheetsDataTable
+            timesheets={visible}
+            employeesById={employeesById}
+            activeId={selected?._id}
+            onOpen={setSelected}
+          />
+        )}
+      </ModuleBody>
+
+      <ModuleStatFooter>
+        <ModuleStat value={visible.length} label="timesheets in view" />
+        <ModuleStat
+          value={
+            loggedMinutes === undefined ? "—" : formatDuration(loggedMinutes)
+          }
+          label="logged this week"
+        />
+        <ModuleStat value={awaiting} label="awaiting approval" />
+        <ModuleStat value={approved} label="approved" />
+      </ModuleStatFooter>
+
+      {orgId ? (
+        <TimesheetSheet
+          orgId={orgId}
+          timesheet={selected}
+          open={selected !== null}
+          onOpenChange={(open) => {
+            if (!open) setSelected(null);
+          }}
+        />
+      ) : null}
+    </>
   );
-}
-
-function formatWeekRange(weekStart: number) {
-  const start = new Date(weekStart);
-  const end = addDays(start, 6);
-  return `${format(start, "MMM d")} – ${format(end, "MMM d, yyyy")}`;
-}
-
-function formatDuration(minutes: number | undefined) {
-  const total = minutes ?? 0;
-  const hours = Math.floor(total / 60);
-  const remainder = total % 60;
-  return `${hours}h ${remainder}m`;
 }
