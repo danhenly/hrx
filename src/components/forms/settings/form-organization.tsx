@@ -24,8 +24,8 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { api } from "../../../../convex/_generated/api";
 import { useActiveOrg } from "@/providers/org-provider";
+import { api } from "../../../../convex/_generated/api";
 
 const schema = z.object({
   name: z.string().min(1, "Organization name is required"),
@@ -38,7 +38,7 @@ const schema = z.object({
 type FormValues = z.infer<typeof schema>;
 
 export function FormOrganization() {
-  const me = useQuery(api.users.getMe);
+  const me = useQuery(api.users.getMe, {});
   const isAdmin = me?.membership?.role === "admin";
   const { orgId } = useActiveOrg();
   const org = useQuery(api.organizations.getOrg, orgId ? { orgId } : "skip");

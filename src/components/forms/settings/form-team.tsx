@@ -43,8 +43,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { api } from "../../../../convex/_generated/api";
 import { useActiveOrg } from "@/providers/org-provider";
+import { api } from "../../../../convex/_generated/api";
 
 // ─── Invite schema ────────────────────────────────────────────────────────────
 const inviteSchema = z.object({
@@ -63,7 +63,7 @@ const directSchema = z.object({
 type DirectValues = z.infer<typeof directSchema>;
 
 export function FormTeam() {
-  const me = useQuery(api.users.getMe);
+  const me = useQuery(api.users.getMe, {});
   const isAdmin = me?.membership?.role === "admin";
   const { orgId } = useActiveOrg();
   const members = useQuery(api.users.listMembers, orgId ? { orgId } : "skip");
@@ -188,7 +188,7 @@ export function FormTeam() {
                   <TableRow>
                     <TableCell
                       colSpan={4}
-                      className="text-muted-foreground text-center py-6"
+                      className="py-6 text-center text-muted-foreground"
                     >
                       No pending invitations
                     </TableCell>

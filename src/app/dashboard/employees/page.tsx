@@ -15,8 +15,8 @@ import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 
 export default function EmployeesPage() {
-  const me = useQuery(api.users.getMe);
   const { orgId } = useActiveOrg();
+  const me = useQuery(api.users.getMe, orgId ? { orgId } : {});
 
   const employees = useQuery(api.employees.list, orgId ? { orgId } : "skip") as
     | EmployeeWithPosition[]
