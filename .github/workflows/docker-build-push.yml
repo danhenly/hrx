@@ -26,3 +26,59 @@ jobs:
           build-args: |
             NEXT_PUBLIC_CONVEX_URL=${{ secrets.NEXT_PUBLIC_CONVEX_URL }}
             NEXT_PUBLIC_CONVEX_SITE_URL=${{ secrets.NEXT_PUBLIC_CONVEX_SITE_URL }}
+
+      # Coolify is a docker-image app: it only deploys when told to. This step is
+      # what turns "image pushed" into "deployed", and it runs after the push so
+      # Coolify can never pull a stale :latest.
+      - name: Deploy on Coolify
+        env:
+          COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${COOLIFY_TOKEN:-}" ]; then
+            echo "::warning::COOLIFY_TOKEN is not set; skipping deploy."
+            exit 0
+          fi
+
+          BASE="https://smol.danhenly.com/api/v1"
+          APP_UUID="ybxthvgr574ryt0h3lvvx0gx"
+          # Cloudflare fronts this hostname and challenges non-browser clients.
+          UA="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
+          resp=$(curl -sS -m 60 -A "$UA" \
+            -X POST "$BASE/deploy" \
+            -H "Authorization: Bearer $COOLIFY_TOKEN" \
+            -H "Accept: application/json" \
+            -H "Content-Type: application/json" \
+            -d "{\"uuid\":\"$APP_UUID\"}")
+
+          echo "deploy response: $resp"
+
+          if ! printf '%s' "$resp" | jq -e . >/dev/null 2>&1; then
+            echo "::error::Coolify returned a non-JSON response. If this is a Cloudflare challenge, allowlist /api/v1/* or use a non-proxied hostname."
+            exit 1
+          fi
+
+          deployment=$(printf '%s' "$resp" | jq -r '.deployments[0].deployment_uuid // empty')
+          if [ -z "$deployment" ]; then
+            echo "::warning::No deployment_uuid returned; nothing to poll."
+            echo "$resp"
+            exit 1
+          fi
+
+          echo "polling deployment $deployment"
+          for _ in $(seq 1 60); do
+            sleep 10
+            status=$(curl -sS -m 60 -A "$UA" \
+              -H "Authorization: Bearer $COOLIFY_TOKEN" \
+              "$BASE/deployments/$deployment" | jq -r '.status // empty')
+            echo "deployment $deployment: ${status:-unknown}"
+            case "$status" in
+              finished) exit 0 ;;
+              failed|cancelled) echo "::error::Coolify deployment $deployment ended as $status"; exit 1 ;;
+            esac
+          done
+
+          echo "::error::Timed out after 10 minutes waiting for deployment $deployment"
+          exit 1
