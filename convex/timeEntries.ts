@@ -3,6 +3,7 @@ import { mutation, query } from "./_generated/server";
 import { logAudit } from "./audit";
 import { manilaMidnight, weekStartOf } from "./lib/week";
 import { requireAdmin, requireAuth, requireMembership } from "./helpers";
+import { syncSheetForWeek } from "./timesheets";
 
 const intervalInput = v.object({
     start: v.number(), // Unix ms
@@ -119,10 +120,11 @@ export const upsertForDay = mutation({
                 status: existing.status,
                 updatedBy: userId,
             });
+            await syncSheetForWeek(ctx, orgId, employeeId, weekStart);
             return existing._id;
         }
 
-        return ctx.db.insert("timeEntries", {
+        const createdId = await ctx.db.insert("timeEntries", {
             orgId,
             employeeId,
             date: day,
@@ -134,6 +136,10 @@ export const upsertForDay = mutation({
             createdBy: userId,
             updatedBy: userId,
         });
+        // A week with drafts must still have a sheet, otherwise the Timesheets
+        // page has nothing to list until someone submits.
+        await syncSheetForWeek(ctx, orgId, employeeId, weekStart);
+        return createdId;
     },
 });
 
@@ -232,5 +238,6 @@ export const deleteDraft = mutation({
             throw new ConvexError("Only creators or admins can delete this entry");
         }
         await ctx.db.delete(entryId);
+        await syncSheetForWeek(ctx, entry.orgId, entry.employeeId, weekStart);
     },
 });

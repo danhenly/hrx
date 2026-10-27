@@ -26,6 +26,8 @@ interface TimesheetSheetProps {
   timesheet: Timesheet | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Lifecycle actions for this sheet, supplied by the page. */
+  footer?: React.ReactNode;
 }
 
 const ENTRY_LABEL = new Map(
@@ -42,6 +44,7 @@ export function TimesheetSheet({
   timesheet,
   open,
   onOpenChange,
+  footer,
 }: TimesheetSheetProps) {
   const entries = useQuery(
     api.timeEntries.listByDateRange,
@@ -120,11 +123,14 @@ export function TimesheetSheet({
         </div>
 
         <SheetFooter className="border-t">
-          <div className="flex w-full items-center justify-between text-sm">
-            <span className="text-muted-foreground">Week total</span>
-            <span className="font-medium tabular-nums">
-              {entries === undefined ? "—" : formatDuration(totalMinutes)}
+          <div className="flex w-full items-center justify-between gap-3 text-sm">
+            <span className="text-muted-foreground">
+              Week total{" "}
+              <span className="ml-1 font-medium text-foreground tabular-nums">
+                {entries === undefined ? "—" : formatDuration(totalMinutes)}
+              </span>
             </span>
+            <div className="flex items-center gap-1">{footer}</div>
           </div>
         </SheetFooter>
       </SheetContent>
