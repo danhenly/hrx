@@ -1,18 +1,17 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { TIMESHEET_STATUS_LABELS, type Timesheet } from "@/data/timekeeping";
-import { formatDuration, formatWeekRange } from "@/lib/week-display";
+import { ENTRY_STATUS_LABELS, type TimeEntry } from "@/data/timekeeping";
+import { formatDay, formatDuration } from "@/lib/week-display";
 
 /**
- * Timesheet rows. The `actions` column is intentionally empty: submit/approve
- * controls belong to the lifecycle work (S2), which replaces the mutations
- * behind them. Keeping the column means S2 adds a cell, not a column set.
+ * One row per employee-day. The `actions` cell is supplied by the page so the
+ * table never re-implements a permission check the server already owns.
  */
 export function timesheetColumns(
   employeesById: Record<string, string>,
-  renderActions?: (timesheet: Timesheet) => React.ReactNode,
-): ColumnDef<Timesheet>[] {
+  renderActions?: (entry: TimeEntry) => React.ReactNode,
+): ColumnDef<TimeEntry>[] {
   return [
     {
       id: "select",
@@ -26,7 +25,7 @@ export function timesheetColumns(
                 : false
           }
           onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
-          aria-label="Select all timesheets"
+          aria-label="Select all entries"
         />
       ),
       enableSorting: false,
@@ -35,7 +34,7 @@ export function timesheetColumns(
           checked={row.getIsSelected()}
           onCheckedChange={(value) => row.toggleSelected(!!value)}
           onClick={(event) => event.stopPropagation()}
-          aria-label={`Select ${employeesById[row.original.employeeId] ?? "timesheet"}`}
+          aria-label={`Select ${employeesById[row.original.employeeId] ?? "entry"}`}
         />
       ),
     },
@@ -54,11 +53,11 @@ export function timesheetColumns(
       ),
     },
     {
-      accessorKey: "weekStart",
-      header: "Week",
+      accessorKey: "date",
+      header: "Date",
       cell: ({ row }) => (
         <span className="text-muted-foreground tabular-nums">
-          {formatWeekRange(row.original.weekStart)}
+          {formatDay(row.original.date)}
         </span>
       ),
     },
@@ -68,7 +67,7 @@ export function timesheetColumns(
       enableSorting: false,
       cell: ({ row }) => (
         <Badge variant="outline">
-          {TIMESHEET_STATUS_LABELS[row.original.status]}
+          {ENTRY_STATUS_LABELS[row.original.status]}
         </Badge>
       ),
     },

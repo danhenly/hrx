@@ -1,10 +1,12 @@
 import type { Doc } from "../../convex/_generated/dataModel";
 
 export type TimeEntry = Doc<"timeEntries">;
+
+/** Legacy week sheet. No new rows are written; the table still exists. */
 export type Timesheet = Doc<"timesheets">;
 
-export const TIMESHEET_STATUS_LABELS: Record<Timesheet["status"], string> = {
-  open: "Draft",
+export const ENTRY_STATUS_LABELS: Record<TimeEntry["status"], string> = {
+  draft: "Draft",
   submitted: "Submitted",
   approved: "Approved",
   rejected: "Rejected",

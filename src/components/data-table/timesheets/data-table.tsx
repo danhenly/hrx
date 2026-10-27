@@ -19,21 +19,21 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import type { Timesheet } from "@/data/timekeeping";
+import type { TimeEntry } from "@/data/timekeeping";
 import { timesheetColumns } from "./columns";
 
 interface TimesheetsDataTableProps {
-  timesheets: Timesheet[];
+  entries: TimeEntry[];
   employeesById: Record<string, string>;
   activeId?: string;
-  onOpen: (timesheet: Timesheet) => void;
-  renderActions?: (timesheet: Timesheet) => React.ReactNode;
+  onOpen: (entry: TimeEntry) => void;
+  renderActions?: (entry: TimeEntry) => React.ReactNode;
   rowSelection?: RowSelectionState;
   onRowSelectionChange?: OnChangeFn<RowSelectionState>;
 }
 
 export function TimesheetsDataTable({
-  timesheets,
+  entries,
   employeesById,
   activeId,
   onOpen,
@@ -42,7 +42,7 @@ export function TimesheetsDataTable({
   onRowSelectionChange,
 }: TimesheetsDataTableProps) {
   const [sorting, setSorting] = useState<SortingState>([
-    { id: "weekStart", desc: true },
+    { id: "date", desc: true },
   ]);
 
   const columns = useMemo(
@@ -51,7 +51,7 @@ export function TimesheetsDataTable({
   );
 
   const table = useReactTable({
-    data: timesheets,
+    data: entries,
     columns,
     state: { sorting, rowSelection: rowSelection ?? {} },
     onSortingChange: setSorting,
@@ -121,7 +121,7 @@ export function TimesheetsDataTable({
               colSpan={columns.length}
               className="h-[120px] text-center text-muted-foreground text-xs"
             >
-              No timesheets for this week.
+              No entries in this range.
             </TableCell>
           </TableRow>
         ) : null}
