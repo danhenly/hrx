@@ -1,5 +1,6 @@
 "use client";
 
+import type { RowSelectionState } from "@tanstack/react-table";
 import { useMutation, useQuery } from "convex/react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useMemo, useState, useTransition } from "react";
@@ -43,6 +44,7 @@ export default function TimePage() {
   const [weekStart, setWeekStart] = useState(() => weekStartOf(Date.now()));
   const [status, setStatus] = useState<string>("all");
   const [selected, setSelected] = useState<Timesheet | null>(null);
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [isPending, startTransition] = useTransition();
 
   const me = useQuery(api.users.getMe, orgId ? { orgId } : {});
@@ -68,6 +70,60 @@ export default function TimePage() {
    * open to members, approve/lock are admin-only. The buttons never re-implement
    * permission checks -- they only avoid offering what the server would reject.
    */
+  /** Rows a bulk action actually applies to; mixed selections are allowed. */
+  function bulkTargets(kind: "submit" | "approve" | "lock") {
+    if (kind === "submit") {
+      return selectedSheets.filter(
+        (sheet) => sheet.status === "open" || sheet.status === "rejected",
+      );
+    }
+    if (kind === "approve") {
+      return selectedSheets.filter((sheet) => sheet.status === "submitted");
+    }
+    return selectedSheets.filter((sheet) => sheet.status === "approved");
+  }
+
+  function runBulk(kind: "submit" | "approve" | "lock") {
+    const targets = bulkTargets(kind);
+    if (!orgId || targets.length === 0) return;
+
+    startTransition(async () => {
+      // Each week is its own transaction; run them in parallel and report both
+      // halves rather than aborting the whole batch on the first failure.
+      const results = await Promise.allSettled(
+        targets.map((sheet) =>
+          kind === "submit"
+            ? submitWeek({
+                orgId,
+                employeeId: sheet.employeeId,
+                weekStart: sheet.weekStart,
+              })
+            : kind === "approve"
+              ? approveSheet({ timesheetId: sheet._id })
+              : lockSheet({ timesheetId: sheet._id }),
+        ),
+      );
+
+      const ok = results.filter(
+        (result) => result.status === "fulfilled",
+      ).length;
+      const failed = results.length - ok;
+      const verb =
+        kind === "submit"
+          ? "submitted"
+          : kind === "approve"
+            ? "approved"
+            : "locked";
+
+      if (failed > 0) {
+        toast.error(`${ok} ${verb}, ${failed} failed`);
+      } else {
+        toast.success(`${ok} ${verb}`);
+      }
+      setRowSelection({});
+    });
+  }
+
   function renderActions(sheet: Timesheet) {
     const stop = (event: React.MouseEvent) => event.stopPropagation();
 
@@ -165,6 +221,11 @@ export default function TimePage() {
       : timesheets.filter((sheet) => sheet.status === status);
   }, [timesheets, status]);
 
+  const selectedSheets = useMemo(
+    () => visible.filter((sheet) => rowSelection[sheet._id]),
+    [visible, rowSelection],
+  );
+
   const loggedMinutes = useMemo(
     () => weekEntries?.reduce((sum, entry) => sum + entry.totalMinutes, 0),
     [weekEntries],
@@ -228,6 +289,52 @@ export default function TimePage() {
         </Select>
       </ModuleToolbar>
 
+      {selectedSheets.length > 0 ? (
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b bg-muted/40 px-(--page-gutter) py-2">
+          <span className="text-muted-foreground text-xs">
+            {selectedSheets.length} selected
+          </span>
+          <div className="flex items-center gap-1">
+            {bulkTargets("submit").length > 0 ? (
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={isPending}
+                onClick={() => runBulk("submit")}
+              >
+                Submit {bulkTargets("submit").length}
+              </Button>
+            ) : null}
+            {isAdmin && bulkTargets("approve").length > 0 ? (
+              <Button
+                size="sm"
+                disabled={isPending}
+                onClick={() => runBulk("approve")}
+              >
+                Approve {bulkTargets("approve").length}
+              </Button>
+            ) : null}
+            {isAdmin && bulkTargets("lock").length > 0 ? (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={isPending}
+                onClick={() => runBulk("lock")}
+              >
+                Lock {bulkTargets("lock").length}
+              </Button>
+            ) : null}
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setRowSelection({})}
+            >
+              Clear
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
       <ModuleBody>
         {isLoading ? (
           <div className="space-y-3 px-(--page-gutter) py-4">
@@ -243,6 +350,8 @@ export default function TimePage() {
             activeId={selected?._id}
             onOpen={setSelected}
             renderActions={renderActions}
+            rowSelection={rowSelection}
+            onRowSelectionChange={setRowSelection}
           />
         )}
       </ModuleBody>
