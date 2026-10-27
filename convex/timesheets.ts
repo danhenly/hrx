@@ -132,11 +132,15 @@ async function submitWeekInternal(
     );
     if (entries.length === 0) throw new ConvexError("No time entries for this week");
 
-    const editable = entries.filter(
-        (entry) => entry.status === "draft" || entry.status === "rejected",
-    );
-    if (editable.length !== entries.length) {
-        throw new ConvexError("Some entries in this week are already submitted or approved");
+    // Entries already flipped to "submitted" (the old per-entry submit did this
+    // without ever touching a sheet) must not block the week: this mutation is
+    // the thing that reconciles them. Only a frozen entry is a real conflict.
+    // Entries have no "locked" status of their own -- the week carries it.
+    const frozen = entries.filter((entry) => entry.status === "approved");
+    if (frozen.length > 0) {
+        throw new ConvexError(
+            "This week has approved entries and cannot be resubmitted",
+        );
     }
 
     const totalMinutes = entries.reduce((sum, entry) => sum + entry.totalMinutes, 0);

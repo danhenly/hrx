@@ -27,7 +27,7 @@ export function NavUser() {
   const { isMobile, setOpenMobile } = useSidebar();
   const { signOut } = useAuthActions();
   const router = useRouter();
-  const me = useQuery(api.users.getMe);
+  const me = useQuery(api.users.getMe, {});
 
   const name = me?.name ?? "User";
   const email = me?.email ?? "";

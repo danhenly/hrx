@@ -9,16 +9,26 @@ import { roleValidator } from "./schema";
  * Returns the current user's profile + their membership row.
  */
 export const getMe = query({
-    args: {},
-    handler: async (ctx) => {
+    args: { orgId: v.optional(v.id("organizations")) },
+    handler: async (ctx, { orgId }) => {
         const userId = await getAuthUserId(ctx);
         if (!userId) return null;
         const user = await ctx.db.get(userId);
         if (!user) return null;
-        const membership = await ctx.db
-            .query("members")
-            .withIndex("by_user", (q) => q.eq("userId", userId))
-            .first();
+        // Resolve membership for the ACTIVE org. Asking for `.first()` handed back
+        // an arbitrary membership, so a user who is admin in one org and hr in
+        // another saw the wrong role -- which silently hid admin-only actions.
+        const membership = orgId
+            ? await ctx.db
+                  .query("members")
+                  .withIndex("by_user_org", (q) =>
+                      q.eq("userId", userId).eq("orgId", orgId),
+                  )
+                  .unique()
+            : await ctx.db
+                  .query("members")
+                  .withIndex("by_user", (q) => q.eq("userId", userId))
+                  .first();
         return { ...user, membership };
     },
 });

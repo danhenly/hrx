@@ -45,7 +45,7 @@ export default function TimePage() {
   const [selected, setSelected] = useState<Timesheet | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  const me = useQuery(api.users.getMe);
+  const me = useQuery(api.users.getMe, orgId ? { orgId } : {});
   const isAdmin = me?.membership?.role === "admin";
 
   const submitWeek = useMutation(api.timesheets.submitForWeek);
