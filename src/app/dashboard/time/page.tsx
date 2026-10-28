@@ -2,6 +2,7 @@
 
 import type { RowSelectionState } from "@tanstack/react-table";
 import { useMutation, useQuery } from "convex/react";
+import { Download } from "lucide-react";
 import { useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { TimesheetsDataTable } from "@/components/data-table/timesheets/data-table";
@@ -25,7 +26,9 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Employee } from "@/data/employees";
 import type { TimeEntry } from "@/data/timekeeping";
+import { downloadCsv } from "@/lib/csv";
 import { dateInputToMs, lastSevenDays } from "@/lib/date-input";
+import { timekeepingCsv } from "@/lib/timekeeping-export";
 import { formatDuration } from "@/lib/week-display";
 import { useActiveOrg } from "@/providers/org-provider";
 import { api } from "../../../../convex/_generated/api";
@@ -41,6 +44,9 @@ const STATUS_FILTERS = [
 ] as const;
 
 type BatchAction = "submit" | "approve" | "reject" | "lock" | "unlock";
+
+/** Payroll is built from approved/locked days; "all" exists for audit only. */
+type ExportStatus = "approved" | "locked" | "all";
 
 type DialogKind = "reject" | "unlock" | "delete";
 
@@ -77,6 +83,7 @@ export default function TimePage() {
   const [from, setFrom] = useState(DEFAULT_RANGE.from);
   const [to, setTo] = useState(DEFAULT_RANGE.to);
   const [status, setStatus] = useState<string>("all");
+  const [exportStatus, setExportStatus] = useState<ExportStatus>("approved");
   const [selected, setSelected] = useState<TimeEntry | null>(null);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [dialog, setDialog] = useState<DialogRequest | null>(null);
@@ -105,6 +112,20 @@ export default function TimePage() {
   const employees = useQuery(api.employees.list, orgId ? { orgId } : "skip") as
     | Employee[]
     | undefined;
+
+  // Same range as the table, but its own status filter: an export is a payroll
+  // artefact, so it defaults to approved days even while the table shows all.
+  const exportData = useQuery(
+    api.timeEntries.exportRows,
+    orgId && rangeValid
+      ? {
+          orgId,
+          startDate: fromMs,
+          endDate: toMs,
+          status: exportStatus === "all" ? undefined : exportStatus,
+        }
+      : "skip",
+  );
 
   const employeesById = useMemo(() => {
     if (!employees) return {};
@@ -170,6 +191,26 @@ export default function TimePage() {
         toast.error((err as Error).message ?? "Action failed");
       }
     });
+  }
+
+  function handleExport() {
+    if (!exportData || exportData.rows.length === 0) {
+      toast.error("Nothing to export for this range");
+      return;
+    }
+
+    downloadCsv(
+      `hrx-timekeeping-${from}-to-${to}.csv`,
+      timekeepingCsv(exportData.rows),
+    );
+
+    if (exportData.truncated) {
+      toast.warning(
+        `Exported the first ${exportData.rows.length} rows — narrow the range for the rest.`,
+      );
+      return;
+    }
+    toast.success(`${exportData.rows.length} rows exported`);
   }
 
   function renderActions(entry: TimeEntry) {
@@ -378,18 +419,43 @@ export default function TimePage() {
           )}
         </div>
 
-        <Select value={status} onValueChange={setStatus}>
-          <SelectTrigger className="w-[160px]" aria-label="Filter by status">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {STATUS_FILTERS.map((option) => (
-              <SelectItem key={option.value} value={option.value}>
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="flex flex-wrap items-center gap-2">
+          <Select value={status} onValueChange={setStatus}>
+            <SelectTrigger className="w-[160px]" aria-label="Filter by status">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {STATUS_FILTERS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <span aria-hidden="true" className="h-5 w-px bg-border" />
+          <Select
+            value={exportStatus}
+            onValueChange={(value) => setExportStatus(value as ExportStatus)}
+          >
+            <SelectTrigger className="w-[170px]" aria-label="Status to export">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="approved">Export approved</SelectItem>
+              <SelectItem value="locked">Export locked</SelectItem>
+              <SelectItem value="all">Export all statuses</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={!exportData || exportData.rows.length === 0}
+            onClick={handleExport}
+          >
+            <Download className="h-4 w-4" />
+            Export CSV
+          </Button>
+        </div>
       </ModuleToolbar>
 
       {selectedEntries.length > 0 ? (
