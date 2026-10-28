@@ -5,7 +5,7 @@ import { useMutation, useQuery } from "convex/react";
 import { useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { TimesheetsDataTable } from "@/components/data-table/timesheets/data-table";
-import { RejectDialog } from "@/components/forms/timekeeping/reject-dialog";
+import { ReasonDialog } from "@/components/forms/timekeeping/reason-dialog";
 import { TimeEntrySheet } from "@/components/forms/timekeeping/time-entry-sheet";
 import {
   ModuleBody,
@@ -40,7 +40,14 @@ const STATUS_FILTERS = [
   { value: "locked", label: "Locked" },
 ] as const;
 
-type BatchAction = "submit" | "approve" | "reject" | "lock";
+type BatchAction = "submit" | "approve" | "reject" | "lock" | "unlock";
+
+type DialogKind = "reject" | "unlock" | "delete";
+
+interface DialogRequest {
+  kind: DialogKind;
+  entryIds: Id<"timeEntries">[];
+}
 
 /**
  * Which rows an action may touch. This mirrors the server guards so the UI does
@@ -51,6 +58,7 @@ const TARGET_STATUSES: Record<BatchAction, TimeEntry["status"][]> = {
   approve: ["submitted"],
   reject: ["submitted"],
   lock: ["approved"],
+  unlock: ["locked"],
 };
 
 const VERBS: Record<BatchAction, string> = {
@@ -58,6 +66,7 @@ const VERBS: Record<BatchAction, string> = {
   approve: "approved",
   reject: "rejected",
   lock: "locked",
+  unlock: "unlocked",
 };
 
 const DEFAULT_RANGE = lastSevenDays();
@@ -70,7 +79,7 @@ export default function TimePage() {
   const [status, setStatus] = useState<string>("all");
   const [selected, setSelected] = useState<TimeEntry | null>(null);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
-  const [rejectIds, setRejectIds] = useState<Id<"timeEntries">[] | null>(null);
+  const [dialog, setDialog] = useState<DialogRequest | null>(null);
   const [isPending, startTransition] = useTransition();
 
   const me = useQuery(api.users.getMe, orgId ? { orgId } : {});
@@ -80,6 +89,8 @@ export default function TimePage() {
   const approveDays = useMutation(api.timeEntries.approveDays);
   const rejectDays = useMutation(api.timeEntries.rejectDays);
   const lockDays = useMutation(api.timeEntries.lockDays);
+  const unlockDays = useMutation(api.timeEntries.unlockDays);
+  const deleteDraft = useMutation(api.timeEntries.deleteDraft);
 
   // Range bounds are Manila wall-clock dates; the server normalises them again.
   const fromMs = from ? dateInputToMs(from) : Number.NaN;
@@ -143,7 +154,9 @@ export default function TimePage() {
               ? await approveDays({ orgId, entryIds })
               : kind === "reject"
                 ? await rejectDays({ orgId, entryIds, reason })
-                : await lockDays({ orgId, entryIds });
+                : kind === "unlock"
+                  ? await unlockDays({ orgId, entryIds, reason: reason ?? "" })
+                  : await lockDays({ orgId, entryIds });
 
         if (result.skipped.length === 0) {
           toast.success(`${result.applied} ${VERBS[kind]}`);
@@ -167,17 +180,32 @@ export default function TimePage() {
 
     if (canSubmit) {
       return (
-        <Button
-          size="sm"
-          variant="secondary"
-          disabled={isPending}
-          onClick={(event) => {
-            stop(event);
-            runBatch("submit", [entry._id]);
-          }}
-        >
-          Submit
-        </Button>
+        <>
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={isPending}
+            onClick={(event) => {
+              stop(event);
+              runBatch("submit", [entry._id]);
+            }}
+          >
+            Submit
+          </Button>
+          {isAdmin && entry.status === "rejected" ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={isPending}
+              onClick={(event) => {
+                stop(event);
+                setDialog({ kind: "delete", entryIds: [entry._id] });
+              }}
+            >
+              Delete
+            </Button>
+          ) : null}
+        </>
       );
     }
 
@@ -200,7 +228,7 @@ export default function TimePage() {
             disabled={isPending}
             onClick={(event) => {
               stop(event);
-              setRejectIds([entry._id]);
+              setDialog({ kind: "reject", entryIds: [entry._id] });
             }}
           >
             Reject
@@ -225,6 +253,22 @@ export default function TimePage() {
       );
     }
 
+    if (isAdmin && entry.status === "locked") {
+      return (
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={isPending}
+          onClick={(event) => {
+            stop(event);
+            setDialog({ kind: "unlock", entryIds: [entry._id] });
+          }}
+        >
+          Unlock
+        </Button>
+      );
+    }
+
     return null;
   }
 
@@ -243,6 +287,48 @@ export default function TimePage() {
   // not the snapshot captured when it was opened.
   const activeEntry =
     entries?.find((entry) => entry._id === selected?._id) ?? selected;
+
+  function runDelete(entryId: Id<"timeEntries">) {
+    startTransition(async () => {
+      try {
+        await deleteDraft({ entryId });
+        toast.success("Entry deleted");
+        setRowSelection({});
+      } catch (err) {
+        toast.error((err as Error).message ?? "Delete failed");
+      }
+    });
+  }
+
+  const dialogCount = dialog?.entryIds.length ?? 0;
+  const dialogNoun = dialogCount === 1 ? "entry" : "entries";
+  const dialogConfig =
+    dialog?.kind === "unlock"
+      ? {
+          title: `Unlock ${dialogCount} ${dialogNoun}`,
+          description:
+            "The day returns to the employee as rejected so it can be corrected and resubmitted. The lock and this reason stay on the record.",
+          confirmLabel: `Unlock ${dialogCount}`,
+          requireReason: true,
+          destructive: false,
+        }
+      : dialog?.kind === "delete"
+        ? {
+            title: `Delete ${dialogCount} ${dialogNoun}`,
+            description:
+              "A rejected entry is removed permanently. The deletion is audited.",
+            confirmLabel: "Delete",
+            requireReason: false,
+            destructive: true,
+          }
+        : {
+            title: `Reject ${dialogCount} ${dialogNoun}`,
+            description:
+              "The reason is copied to every selected entry, so the employee sees the same note on each day.",
+            confirmLabel: `Reject ${dialogCount}`,
+            requireReason: true,
+            destructive: false,
+          };
 
   return (
     <>
@@ -347,9 +433,10 @@ export default function TimePage() {
                 variant="ghost"
                 disabled={isPending}
                 onClick={() =>
-                  setRejectIds(
-                    targetsFor("reject").map((entry) => entry._id),
-                  )
+                  setDialog({
+                    kind: "reject",
+                    entryIds: targetsFor("reject").map((entry) => entry._id),
+                  })
                 }
               >
                 Reject {targetsFor("reject").length}
@@ -368,6 +455,21 @@ export default function TimePage() {
                 }
               >
                 Lock {targetsFor("lock").length}
+              </Button>
+            ) : null}
+            {isAdmin && targetsFor("unlock").length > 0 ? (
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={isPending}
+                onClick={() =>
+                  setDialog({
+                    kind: "unlock",
+                    entryIds: targetsFor("unlock").map((entry) => entry._id),
+                  })
+                }
+              >
+                Unlock {targetsFor("unlock").length}
               </Button>
             ) : null}
             <Button
@@ -438,15 +540,24 @@ export default function TimePage() {
         />
       ) : null}
 
-      <RejectDialog
-        open={rejectIds !== null}
-        count={rejectIds?.length ?? 0}
+      <ReasonDialog
+        open={dialog !== null}
+        title={dialogConfig.title}
+        description={dialogConfig.description}
+        confirmLabel={dialogConfig.confirmLabel}
+        requireReason={dialogConfig.requireReason}
+        destructive={dialogConfig.destructive}
         pending={isPending}
-        onCancel={() => setRejectIds(null)}
+        onCancel={() => setDialog(null)}
         onConfirm={(reason) => {
-          const ids = rejectIds ?? [];
-          setRejectIds(null);
-          runBatch("reject", ids, reason);
+          const request = dialog;
+          setDialog(null);
+          if (!request) return;
+          if (request.kind === "delete") {
+            runDelete(request.entryIds[0]);
+            return;
+          }
+          runBatch(request.kind, request.entryIds, reason);
         }}
       />
     </>
