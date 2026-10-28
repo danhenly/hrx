@@ -201,7 +201,10 @@ const PERIOD_PLAN = [
 
 const FILLER_FIRST = ["Ana", "Luis", "Carla", "Miguel", "Grace", "Paolo", "Ruby", "Nestor", "Divina", "Efren"];
 const FILLER_LAST = ["Garcia", "Ramos", "Torres", "Flores", "Navarro", "Castillo", "Domingo", "Salazar", "Pascual", "Yulo"];
-const FILLER_RATES = [16823.75, 20000, 24000, 30000, 36000, 42000];
+// Rates are per pay type: a monthly figure handed to a daily-paid filler would
+// make them a ₱42,000/day employee, which is not a payroll anyone can sanity-check.
+const FILLER_MONTHLY_RATES = [16823.75, 20000, 24000, 30000, 36000, 42000];
+const FILLER_DAILY_RATES = [645, 700, 750, 800, 900];
 
 /** Cap per run: a single Convex mutation is one transaction, so a 1,200-head set
  *  has to be chunked (P3, §8.1b). Refusing beats a half-written dataset. */
@@ -357,7 +360,7 @@ export const seedPayrollDataset = internalMutation({
                       firstName: FILLER_FIRST[index % FILLER_FIRST.length],
                       lastName: FILLER_LAST[Math.floor(index / FILLER_FIRST.length) % FILLER_LAST.length],
                       payType: random() > 0.75 ? "daily" : "monthly",
-                      basicRate: FILLER_RATES[Math.floor(random() * FILLER_RATES.length)],
+                      basicRate: 0, // set below, from the list matching payType
                       dailyRateBasis: "313",
                       workWeek: random() > 0.85 ? "5_day" : "6_day",
                       allowances: random() > 0.5 ? [RICE] : [],
@@ -366,6 +369,14 @@ export const seedPayrollDataset = internalMutation({
                       status: "active",
                       why: "filler",
                   };
+            if (!persona) {
+                // Defaults above leave basicRate 0; draw from the list that matches
+                // the pay type so the scale is plausible in both directions.
+                spec.basicRate =
+                    spec.payType === "daily"
+                        ? FILLER_DAILY_RATES[Math.floor(random() * FILLER_DAILY_RATES.length)]
+                        : FILLER_MONTHLY_RATES[Math.floor(random() * FILLER_MONTHLY_RATES.length)];
+            }
 
             const employeeId = await ctx.db.insert("employees", {
                 orgId,
