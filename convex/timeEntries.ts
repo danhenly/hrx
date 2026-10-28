@@ -3,7 +3,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
 import { mutation, query } from "./_generated/server";
 import { logAudit } from "./audit";
-import { DAY_MS, manilaMidnight } from "./lib/week";
+import { DAY_MS, PH_OFFSET_MS, manilaMidnight } from "./lib/week";
 import { requireAdmin, requireAuth, requireMembership } from "./helpers";
 
 const intervalInput = v.object({
@@ -34,6 +34,17 @@ async function assertEmployeeOrg(ctx: any, orgId: any, employeeId: any) {
     if (employee.orgId !== orgId) throw new ConvexError("Employee not in organisation");
     return employee;
 }
+
+/** "HH:mm" in Manila. The server's locale is not the employee's, so never toLocale*(). */
+function manilaTime(ms: number) {
+    const manila = new Date(ms + PH_OFFSET_MS);
+    const hours = String(manila.getUTCHours()).padStart(2, "0");
+    const minutes = String(manila.getUTCMinutes()).padStart(2, "0");
+    return `${hours}:${minutes}`;
+}
+
+/** Bounds a payroll export: 50 employees x 7 days is 350 rows, so 2000 is 5x headroom. */
+const MAX_EXPORT_ROWS = 2000;
 
 // ─── Queries ──────────────────────────────────────────────────────────────
 
@@ -71,6 +82,100 @@ export const listByDateRange = query({
         return employeeId
             ? entries.filter((entry) => entry.employeeId === employeeId)
             : entries;
+    },
+});
+
+export const exportRows = query({
+    args: {
+        orgId: v.id("organizations"),
+        startDate: v.number(),
+        endDate: v.number(),
+        // A SET, not one status: payroll needs approved AND locked days, and
+        // locking a day must not make it disappear from the export.
+        statuses: v.optional(
+            v.array(
+                v.union(
+                    v.literal("draft"),
+                    v.literal("submitted"),
+                    v.literal("approved"),
+                    v.literal("rejected"),
+                    v.literal("locked"),
+                ),
+            ),
+        ),
+    },
+    handler: async (ctx, { orgId, startDate, endDate, statuses }) => {
+        const userId = await requireAuth(ctx);
+        await requireMembership(ctx, userId, orgId);
+
+        const start = manilaMidnight(startDate);
+        const end = manilaMidnight(endDate);
+        if (end < start) {
+            throw new ConvexError("End date must be on or after the start date");
+        }
+        if (end - start > MAX_RANGE_DAYS * DAY_MS) {
+            throw new ConvexError(`Date range cannot exceed ${MAX_RANGE_DAYS} days`);
+        }
+
+        const entries = await ctx.db
+            .query("timeEntries")
+            .withIndex("by_org_date", (q) =>
+                q.eq("orgId", orgId).gte("date", start).lte("date", end),
+            )
+            .collect();
+
+        const employees = await ctx.db
+            .query("employees")
+            .withIndex("by_org", (q) => q.eq("orgId", orgId))
+            .collect();
+        const byId = new Map(
+            employees.map((employee) => [employee._id as string, employee]),
+        );
+
+        const filtered =
+            statuses && statuses.length > 0
+                ? entries.filter((entry) => statuses.includes(entry.status))
+                : entries;
+
+        // Newest first so a payroll sheet opens on the latest days.
+        const sorted = [...filtered].sort(
+            (a, b) =>
+                b.date - a.date ||
+                String(a.employeeId).localeCompare(String(b.employeeId)),
+        );
+
+        const rows = sorted.slice(0, MAX_EXPORT_ROWS).map((entry) => {
+            const employee = byId.get(entry.employeeId as string);
+            return {
+                employeeName: employee
+                    ? `${employee.lastName}, ${employee.firstName}`
+                    : "(deleted employee)",
+                employeeEmail: employee?.email ?? "",
+                date: entry.date,
+                intervals: entry.intervals
+                    .map(
+                        (interval) =>
+                            `${manilaTime(interval.start)}-${manilaTime(interval.end)}`,
+                    )
+                    .join("; "),
+                totalMinutes: entry.totalMinutes,
+                totalHours: (entry.totalMinutes / 60).toFixed(2),
+                status: entry.status,
+                rejectedReason: entry.rejectedReason ?? "",
+                notes: entry.notes ?? "",
+            };
+        });
+
+        return {
+            startDate: start,
+            endDate: end,
+            rows,
+            totalMinutes: filtered.reduce(
+                (sum, entry) => sum + entry.totalMinutes,
+                0,
+            ),
+            truncated: sorted.length > MAX_EXPORT_ROWS,
+        };
     },
 });
 

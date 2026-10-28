@@ -1,14 +1,18 @@
 "use client";
 
 import { useQuery } from "convex/react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download } from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
 import { ManualEntryGrid } from "@/components/forms/timekeeping/manual-entry-grid";
 import { ModuleBody, ModuleToolbar } from "@/components/layout/module";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Employee } from "@/data/employees";
 import type { TimeEntry } from "@/data/timekeeping";
+import { downloadCsv } from "@/lib/csv";
+import { formatDateInput } from "@/lib/date-input";
+import { timekeepingCsv } from "@/lib/timekeeping-export";
 import { WEEK_MS, weekStartOf } from "@/lib/week";
 import { formatWeekRange } from "@/lib/week-display";
 import { useActiveOrg } from "@/providers/org-provider";
@@ -32,7 +36,34 @@ export default function TimeEntriesPage() {
       : "skip",
   ) as TimeEntry[] | undefined;
 
+  // The week grid exports every status: a supervisor downloads the week as it
+  // stands, drafts included, to check it before submitting.
+  const exportData = useQuery(
+    api.timeEntries.exportRows,
+    orgId
+      ? { orgId, startDate: weekStartMs, endDate: weekStartMs + WEEK_MS - 1 }
+      : "skip",
+  );
+
   const isLoading = !orgId || entries === undefined || employees === undefined;
+
+  function handleExport() {
+    if (!exportData || exportData.rows.length === 0) {
+      toast.error("Nothing to export for this week");
+      return;
+    }
+    downloadCsv(
+      `hrx-timekeeping-week-${formatDateInput(weekStartMs)}.csv`,
+      timekeepingCsv(exportData.rows),
+    );
+    if (exportData.truncated) {
+      toast.warning(
+        `Exported the first ${exportData.rows.length} rows — export a narrower range from Timesheets.`,
+      );
+      return;
+    }
+    toast.success(`${exportData.rows.length} rows exported`);
+  }
 
   return (
     <>
@@ -63,6 +94,15 @@ export default function TimeEntriesPage() {
             onClick={() => setWeekStartMs(weekStartOf(Date.now()))}
           >
             This week
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!exportData || exportData.rows.length === 0}
+            onClick={handleExport}
+          >
+            <Download className="h-4 w-4" />
+            Export week
           </Button>
         </div>
         <p className="text-muted-foreground text-xs">
