@@ -45,8 +45,19 @@ const STATUS_FILTERS = [
 
 type BatchAction = "submit" | "approve" | "reject" | "lock" | "unlock";
 
-/** Payroll is built from approved/locked days; "all" exists for audit only. */
-type ExportStatus = "approved" | "locked" | "all";
+/**
+ * Payroll is built from approved days, and locking a day must not remove it
+ * from the sheet — so the default is the PAIR, not one status. Single statuses
+ * and the full range are there for audit.
+ */
+type ExportStatus = "payroll" | "approved" | "locked" | "all";
+
+const EXPORT_STATUSES: Record<ExportStatus, TimeEntry["status"][] | undefined> = {
+  payroll: ["approved", "locked"],
+  approved: ["approved"],
+  locked: ["locked"],
+  all: undefined,
+};
 
 type DialogKind = "reject" | "unlock" | "delete";
 
@@ -83,7 +94,7 @@ export default function TimePage() {
   const [from, setFrom] = useState(DEFAULT_RANGE.from);
   const [to, setTo] = useState(DEFAULT_RANGE.to);
   const [status, setStatus] = useState<string>("all");
-  const [exportStatus, setExportStatus] = useState<ExportStatus>("approved");
+  const [exportStatus, setExportStatus] = useState<ExportStatus>("payroll");
   const [selected, setSelected] = useState<TimeEntry | null>(null);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [dialog, setDialog] = useState<DialogRequest | null>(null);
@@ -122,7 +133,7 @@ export default function TimePage() {
           orgId,
           startDate: fromMs,
           endDate: toMs,
-          status: exportStatus === "all" ? undefined : exportStatus,
+          statuses: EXPORT_STATUSES[exportStatus],
         }
       : "skip",
   );
@@ -441,8 +452,9 @@ export default function TimePage() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="approved">Export approved</SelectItem>
-              <SelectItem value="locked">Export locked</SelectItem>
+              <SelectItem value="payroll">Export payroll (approved + locked)</SelectItem>
+              <SelectItem value="approved">Export approved only</SelectItem>
+              <SelectItem value="locked">Export locked only</SelectItem>
               <SelectItem value="all">Export all statuses</SelectItem>
             </SelectContent>
           </Select>

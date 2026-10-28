@@ -90,17 +90,21 @@ export const exportRows = query({
         orgId: v.id("organizations"),
         startDate: v.number(),
         endDate: v.number(),
-        status: v.optional(
-            v.union(
-                v.literal("draft"),
-                v.literal("submitted"),
-                v.literal("approved"),
-                v.literal("rejected"),
-                v.literal("locked"),
+        // A SET, not one status: payroll needs approved AND locked days, and
+        // locking a day must not make it disappear from the export.
+        statuses: v.optional(
+            v.array(
+                v.union(
+                    v.literal("draft"),
+                    v.literal("submitted"),
+                    v.literal("approved"),
+                    v.literal("rejected"),
+                    v.literal("locked"),
+                ),
             ),
         ),
     },
-    handler: async (ctx, { orgId, startDate, endDate, status }) => {
+    handler: async (ctx, { orgId, startDate, endDate, statuses }) => {
         const userId = await requireAuth(ctx);
         await requireMembership(ctx, userId, orgId);
 
@@ -128,9 +132,10 @@ export const exportRows = query({
             employees.map((employee) => [employee._id as string, employee]),
         );
 
-        const filtered = status
-            ? entries.filter((entry) => entry.status === status)
-            : entries;
+        const filtered =
+            statuses && statuses.length > 0
+                ? entries.filter((entry) => statuses.includes(entry.status))
+                : entries;
 
         // Newest first so a payroll sheet opens on the latest days.
         const sorted = [...filtered].sort(
