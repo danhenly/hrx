@@ -18,6 +18,7 @@ import {
     type EmployeeProfileValues,
     FormEmployeeProfile,
 } from "./form-employee-profile";
+import { FormEmployeeStatutoryIds } from "./form-employee-statutory-ids";
 import { FormPositionHistory } from "./form-position-history";
 
 // ─── Add Employee Sheet ─────────────────────────────────────────────────────
@@ -115,6 +116,9 @@ function EditEmployeeSheetContent({
                 <TabsTrigger value="positions" className="flex-1">
                     Position History
                 </TabsTrigger>
+                <TabsTrigger value="government" className="flex-1">
+                    Government &amp; Bank
+                </TabsTrigger>
             </TabsList>
 
             <TabsContent value="profile">
@@ -139,6 +143,12 @@ function EditEmployeeSheetContent({
                         orgId={orgId}
                     />
                 )}
+            </TabsContent>
+
+            <TabsContent value="government">
+                <FormEmployeeStatutoryIds
+                    employeeId={employee._id as Id<"employees">}
+                />
             </TabsContent>
         </Tabs>
     );

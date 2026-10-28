@@ -46,6 +46,26 @@ export async function requireMembership(
 }
 
 /**
+ * For INTERNAL functions (`internalMutation`/`internalQuery`), which have no
+ * session identity when invoked with `npx convex run`: verifies the supplied
+ * actor holds `admin` in at least one org.
+ *
+ * Internal functions are not client-callable, so this is not a substitute for
+ * `requireAdmin` — it is what lets a seed/backfill refuse an actor that is only
+ * an `hr` member, and what gives the audit row a real person to name.
+ */
+export async function requireAnyAdmin(
+    ctx: QueryCtx | MutationCtx,
+    actorId: Id<"users">
+) {
+    const memberships = await listUserMemberships(ctx, actorId);
+    if (!memberships.some((membership) => membership.role === "admin")) {
+        throw new ConvexError("Admin role required");
+    }
+    return memberships;
+}
+
+/**
  * Verifies that `userId` is an **admin** of `orgId`.
  * Throws if not a member or not an admin.
  */
