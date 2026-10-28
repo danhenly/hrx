@@ -172,8 +172,8 @@ export function ManualEntryGrid({
     <div className="flex min-h-0 flex-col">
       <div className="flex items-center justify-between gap-3 px-(--page-gutter) py-3">
         <p className="text-muted-foreground text-xs">
-          Up to three intervals per day. A shift crossing midnight counts on its
-          start date.
+          Up to three intervals per day, no overlapping times, and a day cannot
+          exceed 24 hours. A shift crossing midnight counts on its start date.
         </p>
         <Button
           variant="secondary"

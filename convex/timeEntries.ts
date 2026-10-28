@@ -3,6 +3,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
 import { mutation, query } from "./_generated/server";
 import { logAudit } from "./audit";
+import { validateIntervals } from "./lib/intervals";
 import { DAY_MS, PH_OFFSET_MS, manilaMidnight } from "./lib/week";
 import { requireAdmin, requireAuth, requireMembership } from "./helpers";
 
@@ -10,23 +11,6 @@ const intervalInput = v.object({
     start: v.number(), // Unix ms
     end: v.number(),   // Unix ms
 });
-
-function validateIntervals(rawIntervals: { start: number; end: number }[]) {
-    if (rawIntervals.length === 0) throw new ConvexError("At least one interval is required");
-    if (rawIntervals.length > 3) throw new ConvexError("Maximum of 3 intervals per day");
-
-    const intervals = rawIntervals.map((interval) => {
-        if (interval.start >= interval.end) {
-            throw new ConvexError("Interval end must be after start");
-        }
-        const durationMinutes = Math.floor((interval.end - interval.start) / 60000);
-        if (durationMinutes <= 0) throw new ConvexError("Interval duration must be positive");
-        return { ...interval, durationMinutes };
-    });
-
-    const totalMinutes = intervals.reduce((sum, i) => sum + i.durationMinutes, 0);
-    return { intervals, totalMinutes };
-}
 
 async function assertEmployeeOrg(ctx: any, orgId: any, employeeId: any) {
     const employee = await ctx.db.get(employeeId);
