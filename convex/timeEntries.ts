@@ -81,7 +81,7 @@ export const listByDateRange = query({
 // instead of one round-trip per row. Ineligible rows are reported, not fatal —
 // a locked day in the selection must not abort the other forty.
 
-type BatchAction = "submit" | "approve" | "reject" | "lock";
+type BatchAction = "submit" | "approve" | "reject" | "lock" | "unlock";
 type EntryStatus = Doc<"timeEntries">["status"];
 
 type BatchResult = {
@@ -97,6 +97,7 @@ const REQUIRED_FROM: Record<BatchAction, EntryStatus[]> = {
     approve: ["submitted"],
     reject: ["submitted"],
     lock: ["approved"],
+    unlock: ["locked"],
 };
 
 const AUDIT_ACTION: Record<BatchAction, string> = {
@@ -104,6 +105,7 @@ const AUDIT_ACTION: Record<BatchAction, string> = {
     approve: "timeEntry.approve",
     reject: "timeEntry.reject",
     lock: "timeEntry.lock",
+    unlock: "timeEntry.unlock",
 };
 
 function patchFor(
@@ -132,6 +134,17 @@ function patchFor(
             return { status: "rejected", rejectedReason: reason, updatedBy: userId };
         case "lock":
             return { status: "locked", lockedAt: now, lockedBy: userId, updatedBy: userId };
+        case "unlock":
+            // The lock is evidence and stays on the document (lockedAt/lockedBy);
+            // the day goes back to the employee as rejected so it must be
+            // corrected and submitted again rather than silently re-approved.
+            return {
+                status: "rejected",
+                rejectedReason: `Unlocked by admin: ${reason ?? ""}`.trim(),
+                approvedAt: undefined,
+                approvedBy: undefined,
+                updatedBy: userId,
+            };
     }
 }
 
@@ -338,8 +351,16 @@ export const deleteDraft = mutation({
         if (!entry) throw new ConvexError("Entry not found");
         const membership = await requireMembership(ctx, userId, entry.orgId);
 
-        if (entry.status !== "draft") throw new ConvexError("Only draft entries can be deleted");
-        if (entry.createdBy !== userId && membership.role !== "admin") {
+        // A rejected day has nothing to submit - an admin may clear it. Drafts stay
+        // deletable by their creator; anything approved or locked is immutable.
+        const isAdmin = membership.role === "admin";
+        const deletable = entry.status === "draft" || (isAdmin && entry.status === "rejected");
+        if (!deletable) {
+            throw new ConvexError(
+                "Only draft entries can be deleted (an admin may also delete a rejected entry)",
+            );
+        }
+        if (entry.createdBy !== userId && !isAdmin) {
             throw new ConvexError("Only creators or admins can delete this entry");
         }
         await ctx.db.delete(entryId);
@@ -431,6 +452,39 @@ export const lockDays = mutation({
             { userId, role: "admin" },
             entries,
             "lock",
+        );
+        return { applied: result.applied, skipped: [...skipped, ...result.skipped] };
+    },
+});
+
+/**
+ * Admin correction path out of `locked`. A reason is mandatory: the day returns
+ * to the employee as rejected (never straight back to approved), the lock
+ * timestamp and actor stay on the row as evidence, and the audit trail keeps the
+ * correction. No bulk unlock at the week level - the selection IS the scope.
+ */
+export const unlockDays = mutation({
+    args: {
+        orgId: v.id("organizations"),
+        entryIds: v.array(v.id("timeEntries")),
+        reason: v.string(),
+    },
+    handler: async (ctx, { orgId, entryIds, reason }) => {
+        const userId = await requireAuth(ctx);
+        await requireAdmin(ctx, userId, orgId);
+
+        const trimmed = reason.trim();
+        if (trimmed.length < 3) {
+            throw new ConvexError("A reason is required to unlock time");
+        }
+
+        const { entries, skipped } = await loadBatch(ctx, orgId, entryIds);
+        const result = await applyStatusBatch(
+            ctx,
+            { userId, role: "admin" },
+            entries,
+            "unlock",
+            trimmed,
         );
         return { applied: result.applied, skipped: [...skipped, ...result.skipped] };
     },
