@@ -4,7 +4,7 @@ import { logAudit } from "../audit";
 import { requireAnyAdmin, requireMembership } from "../helpers";
 import { msOfDateKey } from "../lib/payroll/calendar";
 import { semiMonthlyBrackets } from "../lib/payroll/tax";
-import { ALLOWANCE_CATALOGUE, STATUTORY_SEED } from "./statutorySeed";
+import { ALLOWANCE_CATALOGUE, STATUTORY_SEED, type StatutorySeedRow } from "./statutorySeed";
 
 /**
  * Seeds plan §2 into `statutoryTables` (P0.2).
@@ -21,25 +21,58 @@ import { ALLOWANCE_CATALOGUE, STATUTORY_SEED } from "./statutorySeed";
  *   npx convex run payroll/seedStatutory:seedStatutoryTables \
  *     '{"orgId":"<id>","actorId":"<admin user id>"}'
  */
+/**
+ * The payload to store for a seed row. The tax row carries its DERIVED semi-monthly
+ * table, exactly as statutoryTables.upsert would, so a seeded table and an
+ * admin-edited one have the same shape.
+ */
+function buildPayload(seedRow: StatutorySeedRow): unknown {
+    if (seedRow.kind !== "tax") return seedRow.payload;
+    const annualBrackets = (
+        seedRow.payload as {
+            annualBrackets: {
+                from: number;
+                to: number | null;
+                base: number;
+                rate: number;
+            }[];
+        }
+    ).annualBrackets;
+    return { ...(seedRow.payload as object), semiMonthly: semiMonthlyBrackets(annualBrackets) };
+}
+
 export const seedStatutoryTables = internalMutation({
     args: {
         orgId: v.id("organizations"),
         actorId: v.id("users"),
         dryRun: v.optional(v.boolean()),
+        /**
+         * Overwrite rows whose (kind, effectiveFrom) already exists. Off by default
+         * because after the first seed the app is the system of record and an
+         * admin's edits must survive a re-seed; it exists so a CORRECTED mirror
+         * (e.g. the EC bands and MPF split added after the first seed) can be
+         * applied before go-live without hand-editing six rows.
+         */
+        refresh: v.optional(v.boolean()),
     },
     returns: v.object({
         dryRun: v.boolean(),
         inserted: v.number(),
+        refreshed: v.number(),
         skipped: v.number(),
         rows: v.array(
             v.object({
                 kind: v.string(),
                 effectiveFrom: v.string(),
-                action: v.union(v.literal("insert"), v.literal("skip")),
+                action: v.union(
+                    v.literal("insert"),
+                    v.literal("refresh"),
+                    v.literal("skip"),
+                ),
             }),
         ),
     }),
-    handler: async (ctx, { orgId, actorId, dryRun = false }) => {
+    handler: async (ctx, { orgId, actorId, dryRun = false, refresh = false }) => {
         await requireAnyAdmin(ctx, actorId);
         await requireMembership(ctx, actorId, orgId);
 
@@ -51,52 +84,42 @@ export const seedStatutoryTables = internalMutation({
         const rows: {
             kind: string;
             effectiveFrom: string;
-            action: "insert" | "skip";
+            action: "insert" | "refresh" | "skip";
         }[] = [];
         let inserted = 0;
+        let refreshed = 0;
         let skipped = 0;
 
         for (const seedRow of STATUTORY_SEED) {
             const effectiveFrom = msOfDateKey(seedRow.effectiveFrom);
             const key = `${seedRow.kind}|${effectiveFrom}`;
-            if (byKey.has(key)) {
+            const existingRow = byKey.get(key);
+            if (existingRow) {
+                if (!refresh) {
+                    rows.push({
+                        kind: seedRow.kind,
+                        effectiveFrom: seedRow.effectiveFrom,
+                        action: "skip",
+                    });
+                    skipped += 1;
+                    continue;
+                }
+                if (!dryRun) {
+                    await ctx.db.patch(existingRow._id, {
+                        payload: buildPayload(seedRow),
+                        source: seedRow.source,
+                    });
+                }
                 rows.push({
                     kind: seedRow.kind,
                     effectiveFrom: seedRow.effectiveFrom,
-                    action: "skip",
+                    action: "refresh",
                 });
-                skipped += 1;
+                refreshed += 1;
                 continue;
             }
 
-            // The tax row stores its derived semi-monthly table, exactly as
-            // statutoryTables.upsert would, so a seeded table and an edited one
-            // have the same shape.
-            const payload =
-                seedRow.kind === "tax"
-                    ? {
-                          ...(seedRow.payload as {
-                              annualBrackets: {
-                                  from: number;
-                                  to: number | null;
-                                  base: number;
-                                  rate: number;
-                              }[];
-                          }),
-                          semiMonthly: semiMonthlyBrackets(
-                              (
-                                  seedRow.payload as {
-                                      annualBrackets: {
-                                          from: number;
-                                          to: number | null;
-                                          base: number;
-                                          rate: number;
-                                      }[];
-                                  }
-                              ).annualBrackets,
-                          ),
-                      }
-                    : seedRow.payload;
+            const payload = buildPayload(seedRow);
 
             if (!dryRun) {
                 await ctx.db.insert("statutoryTables", {
@@ -124,7 +147,7 @@ export const seedStatutoryTables = internalMutation({
             });
         }
 
-        return { dryRun, inserted, skipped, rows };
+        return { dryRun, inserted, refreshed, skipped, rows };
     },
 });
 
@@ -140,13 +163,21 @@ export const seedAllowanceTypes = internalMutation({
         orgId: v.id("organizations"),
         actorId: v.id("users"),
         dryRun: v.optional(v.boolean()),
+        /**
+         * Overwrite rows whose (kind, effectiveFrom) already exists. Off by default
+         * because after the first seed the app is the system of record and an
+         * admin's edits must survive a re-seed; it exists so a CORRECTED mirror
+         * (e.g. the EC bands and MPF split added after the first seed) can be
+         * applied before go-live without hand-editing six rows.
+         */
+        refresh: v.optional(v.boolean()),
     },
     returns: v.object({
         dryRun: v.boolean(),
         inserted: v.number(),
         skipped: v.number(),
     }),
-    handler: async (ctx, { orgId, actorId, dryRun = false }) => {
+    handler: async (ctx, { orgId, actorId, dryRun = false, refresh = false }) => {
         await requireAnyAdmin(ctx, actorId);
         await requireMembership(ctx, actorId, orgId);
 
@@ -157,6 +188,7 @@ export const seedAllowanceTypes = internalMutation({
         const codes = new Set(existing.map((row) => row.code));
 
         let inserted = 0;
+        let refreshed = 0;
         let skipped = 0;
         for (const type of ALLOWANCE_CATALOGUE) {
             if (codes.has(type.code)) {

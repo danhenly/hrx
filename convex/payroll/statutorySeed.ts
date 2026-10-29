@@ -57,21 +57,21 @@ export type SssPayload = {
     employerRate: number;
     mscMin: number;
     mscMax: number;
-    /** Employer-only Employees' Compensation. Amounts are published; the MSC
-     *  threshold that selects between them is NOT stated in the plan. */
-    ecEmployer: {
-        amounts: number[];
-        thresholdMsc: number | null;
-        note: string;
+    /** MSC brackets move in ₱500 steps (Circular 2024-006). */
+    mscStep: number;
+    /** Employer-only Employees' Compensation, flat per employee. */
+    ec: {
+        low: number;
+        high: number;
+        /** MSC at or below this pays `low`; at or above (low + step) pays `high`. */
+        lowMaxMsc: number;
     };
-    /** WISP split above the MSC threshold — the plan says to take the split from
-     *  the current SSS schedule without reproducing it, so P2 must enter it. */
-    wisp: {
+    /** Mandatory Provident Fund (MySSS Pension Booster, formerly WISP): the MSC
+     *  above `mscThreshold` is credited here at the SAME rates as regular SS. */
+    mpf: {
         mscThreshold: number;
-        regularMscCeiling: number;
-        employeeRate: number | null;
-        employerRate: number | null;
-        note: string;
+        employeeRate: number;
+        employerRate: number;
     };
 };
 
@@ -81,18 +81,14 @@ const SSS_2025: SssPayload = {
     employerRate: 0.1,
     mscMin: 5000,
     mscMax: 35000,
-    ecEmployer: {
-        amounts: [10, 30],
-        thresholdMsc: null,
-        note: "§2.1 publishes ₱10 or ₱30 depending on the MSC bracket but not the bracket boundary itself. Confirm against the SSS schedule before P2 computes EC, then enter the threshold here or in the editor.",
-    },
-    wisp: {
-        mscThreshold: 20000,
-        regularMscCeiling: 35000,
-        employeeRate: null,
-        employerRate: null,
-        note: "§2.1: contributions above MSC ₱20,000 split into regular SS and WISP portions, 'take the split from the current SSS schedule'. That schedule is not reproduced in the plan, so the split rates are deliberately unset — enter the current WISP schedule in Settings → Payroll before P2 computes contributions.",
-    },
+    mscStep: 500,
+    // sss.gov.ph/pay-contribution: "TEN PESOS (P10) for employees with an MSC of
+    // P14,500 and below, and THIRTY PESOS (P30) for employees with an MSC of
+    // P15,000 and above". The two figures the plan left unpublished.
+    ec: { low: 10, high: 30, lowMaxMsc: 14500 },
+    // Circular 2024-006: MSC above ₱20,000 is credited to the MPF at the same
+    // 10% / 5%. It is a split of where the money goes, not a different rate.
+    mpf: { mscThreshold: 20000, employeeRate: 0.05, employerRate: 0.1 },
 };
 
 // ─── §2.2 PhilHealth (RA 11223) ────────────────────────────────────────────

@@ -701,7 +701,7 @@
       }
     },
     {
-      "name": "every P1 result is blocked: earnings exist, statutory deductions do not",
+      "name": "every result is still blocked: loans and 13th month are P5",
       "kind": "computePayslip",
       "input": {
         "terms": {
@@ -719,7 +719,7 @@
         "entries": []
       },
       "expect": {
-        "blocked": "STATUTORY_PENDING"
+        "blocked": "PAYOUT_FEATURES_PENDING"
       }
     },
     {

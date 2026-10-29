@@ -1,0 +1,699 @@
+{
+  "description": "statutory.ts (SSS/PhilHealth/Pag-IBIG, D3 split) + tax.ts withholding and annualisation (P2). Money is integer centavos.",
+  "cases": [
+    {
+      "name": "MSC steps to the nearest \u20b1500 bracket: 16,823.75 -> 17,000",
+      "kind": "msc",
+      "input": {
+        "basePesos": 16823.75,
+        "table": {
+          "totalRate": 0.15,
+          "employeeRate": 0.05,
+          "employerRate": 0.1,
+          "mscMin": 5000,
+          "mscMax": 35000,
+          "mscStep": 500,
+          "ec": {
+            "low": 10,
+            "high": 30,
+            "lowMaxMsc": 14500
+          },
+          "mpf": {
+            "mscThreshold": 20000,
+            "employeeRate": 0.05,
+            "employerRate": 0.1
+          }
+        }
+      },
+      "expect": {
+        "msc": 17000
+      }
+    },
+    {
+      "name": "MSC is floored at \u20b15,000",
+      "kind": "msc",
+      "input": {
+        "basePesos": 4000,
+        "table": {
+          "totalRate": 0.15,
+          "employeeRate": 0.05,
+          "employerRate": 0.1,
+          "mscMin": 5000,
+          "mscMax": 35000,
+          "mscStep": 500,
+          "ec": {
+            "low": 10,
+            "high": 30,
+            "lowMaxMsc": 14500
+          },
+          "mpf": {
+            "mscThreshold": 20000,
+            "employeeRate": 0.05,
+            "employerRate": 0.1
+          }
+        }
+      },
+      "expect": {
+        "msc": 5000
+      }
+    },
+    {
+      "name": "MSC is capped at \u20b135,000",
+      "kind": "msc",
+      "input": {
+        "basePesos": 45000,
+        "table": {
+          "totalRate": 0.15,
+          "employeeRate": 0.05,
+          "employerRate": 0.1,
+          "mscMin": 5000,
+          "mscMax": 35000,
+          "mscStep": 500,
+          "ec": {
+            "low": 10,
+            "high": 30,
+            "lowMaxMsc": 14500
+          },
+          "mpf": {
+            "mscThreshold": 20000,
+            "employeeRate": 0.05,
+            "employerRate": 0.1
+          }
+        }
+      },
+      "expect": {
+        "msc": 35000
+      }
+    },
+    {
+      "name": "SSS at an ordinary MSC: EE 5%, ER 10%, EC \u20b130 above MSC \u20b114,500",
+      "kind": "sss",
+      "input": {
+        "baseCentavos": 1682376,
+        "table": {
+          "totalRate": 0.15,
+          "employeeRate": 0.05,
+          "employerRate": 0.1,
+          "mscMin": 5000,
+          "mscMax": 35000,
+          "mscStep": 500,
+          "ec": {
+            "low": 10,
+            "high": 30,
+            "lowMaxMsc": 14500
+          },
+          "mpf": {
+            "mscThreshold": 20000,
+            "employeeRate": 0.05,
+            "employerRate": 0.1
+          }
+        }
+      },
+      "expect": {
+        "msc": 17000,
+        "employee": 85000,
+        "employer": 170000,
+        "ec": 3000
+      }
+    },
+    {
+      "name": "SSS at MSC \u20b114,500: EC drops to \u20b110",
+      "kind": "sss",
+      "input": {
+        "baseCentavos": 1450000,
+        "table": {
+          "totalRate": 0.15,
+          "employeeRate": 0.05,
+          "employerRate": 0.1,
+          "mscMin": 5000,
+          "mscMax": 35000,
+          "mscStep": 500,
+          "ec": {
+            "low": 10,
+            "high": 30,
+            "lowMaxMsc": 14500
+          },
+          "mpf": {
+            "mscThreshold": 20000,
+            "employeeRate": 0.05,
+            "employerRate": 0.1
+          }
+        }
+      },
+      "expect": {
+        "msc": 14500,
+        "employee": 72500,
+        "employer": 145000,
+        "ec": 1000
+      }
+    },
+    {
+      "name": "SSS at the ceiling: EE \u20b11,750, ER \u20b13,500, MSC split 20,000 regular + 15,000 MPF",
+      "kind": "sss",
+      "input": {
+        "baseCentavos": 4500000,
+        "table": {
+          "totalRate": 0.15,
+          "employeeRate": 0.05,
+          "employerRate": 0.1,
+          "mscMin": 5000,
+          "mscMax": 35000,
+          "mscStep": 500,
+          "ec": {
+            "low": 10,
+            "high": 30,
+            "lowMaxMsc": 14500
+          },
+          "mpf": {
+            "mscThreshold": 20000,
+            "employeeRate": 0.05,
+            "employerRate": 0.1
+          }
+        }
+      },
+      "expect": {
+        "msc": 35000,
+        "mpfMsc": 15000,
+        "employee": 175000,
+        "employer": 350000,
+        "ec": 3000
+      }
+    },
+    {
+      "name": "PhilHealth 2.5% of basic, above the floor",
+      "kind": "philhealth",
+      "input": {
+        "baseCentavos": 1682376,
+        "table": {
+          "rate": 0.05,
+          "employeeShare": 0.025,
+          "employerShare": 0.025,
+          "floor": 10000,
+          "ceiling": 100000
+        }
+      },
+      "expect": {
+        "base": 16823.76,
+        "employee": 42059,
+        "employer": 42059
+      }
+    },
+    {
+      "name": "PhilHealth floor: an \u20b18,000 base pays on \u20b110,000",
+      "kind": "philhealth",
+      "input": {
+        "baseCentavos": 800000,
+        "table": {
+          "rate": 0.05,
+          "employeeShare": 0.025,
+          "employerShare": 0.025,
+          "floor": 10000,
+          "ceiling": 100000
+        }
+      },
+      "expect": {
+        "base": 10000,
+        "employee": 25000,
+        "employer": 25000
+      }
+    },
+    {
+      "name": "PhilHealth ceiling: a \u20b1120,000 base pays on \u20b1100,000 (\u20b12,500 each side)",
+      "kind": "philhealth",
+      "input": {
+        "baseCentavos": 12000000,
+        "table": {
+          "rate": 0.05,
+          "employeeShare": 0.025,
+          "employerShare": 0.025,
+          "floor": 10000,
+          "ceiling": 100000
+        }
+      },
+      "expect": {
+        "base": 100000,
+        "employee": 250000,
+        "employer": 250000
+      }
+    },
+    {
+      "name": "Pag-IBIG 2% of the \u20b110,000 Maximum Fund Salary",
+      "kind": "pagibig",
+      "input": {
+        "baseCentavos": 1682376,
+        "table": {
+          "employeeRate": 0.02,
+          "employerRate": 0.02,
+          "employeeRateLow": 0.01,
+          "lowCompensationThreshold": 1500,
+          "maxFundSalary": 10000
+        }
+      },
+      "expect": {
+        "base": 10000,
+        "employee": 20000,
+        "employer": 20000
+      }
+    },
+    {
+      "name": "Pag-IBIG 1% employee at or below the \u20b11,500 threshold, employer stays 2%",
+      "kind": "pagibig",
+      "input": {
+        "baseCentavos": 120000,
+        "table": {
+          "employeeRate": 0.02,
+          "employerRate": 0.02,
+          "employeeRateLow": 0.01,
+          "lowCompensationThreshold": 1500,
+          "maxFundSalary": 10000
+        }
+      },
+      "expect": {
+        "base": 1200,
+        "employee": 1200,
+        "employer": 2400
+      }
+    },
+    {
+      "name": "D3 split: the centavo residue goes to the SECOND cutoff",
+      "kind": "splitCutoff",
+      "input": {
+        "monthlyCentavos": 42059,
+        "cutoffIndex": 0
+      },
+      "expect": {
+        "centavos": 21029
+      }
+    },
+    {
+      "name": "D3 split: second cutoff carries the residue, so the two halves sum exactly",
+      "kind": "splitCutoff",
+      "input": {
+        "monthlyCentavos": 42059,
+        "cutoffIndex": 1
+      },
+      "expect": {
+        "centavos": 21030
+      }
+    },
+    {
+      "name": "D3 split: an even amount divides cleanly (SSS EE \u20b1850.00)",
+      "kind": "splitCutoff",
+      "input": {
+        "monthlyCentavos": 85000,
+        "cutoffIndex": 0
+      },
+      "expect": {
+        "centavos": 42500
+      }
+    },
+    {
+      "name": "withholding on a 20,000 taxable cutoff",
+      "kind": "withholding",
+      "input": {
+        "taxableCentavos": 2000000,
+        "table": {
+          "annualBrackets": [
+            {
+              "from": 0,
+              "to": 250000,
+              "base": 0,
+              "rate": 0
+            },
+            {
+              "from": 250000,
+              "to": 400000,
+              "base": 0,
+              "rate": 0.15
+            },
+            {
+              "from": 400000,
+              "to": 800000,
+              "base": 22500,
+              "rate": 0.2
+            },
+            {
+              "from": 800000,
+              "to": 2000000,
+              "base": 102500,
+              "rate": 0.25
+            },
+            {
+              "from": 2000000,
+              "to": 8000000,
+              "base": 402500,
+              "rate": 0.3
+            },
+            {
+              "from": 8000000,
+              "to": null,
+              "base": 2202500,
+              "rate": 0.35
+            }
+          ]
+        }
+      },
+      "expect": {
+        "centavos": 160417
+      }
+    },
+    {
+      "name": "minimum-wage cutoff: below the 250k annual exemption, no tax",
+      "kind": "withholding",
+      "input": {
+        "taxableCentavos": 841188,
+        "table": {
+          "annualBrackets": [
+            {
+              "from": 0,
+              "to": 250000,
+              "base": 0,
+              "rate": 0
+            },
+            {
+              "from": 250000,
+              "to": 400000,
+              "base": 0,
+              "rate": 0.15
+            },
+            {
+              "from": 400000,
+              "to": 800000,
+              "base": 22500,
+              "rate": 0.2
+            },
+            {
+              "from": 800000,
+              "to": 2000000,
+              "base": 102500,
+              "rate": 0.25
+            },
+            {
+              "from": 2000000,
+              "to": 8000000,
+              "base": 402500,
+              "rate": 0.3
+            },
+            {
+              "from": 8000000,
+              "to": null,
+              "base": 2202500,
+              "rate": 0.35
+            }
+          ]
+        }
+      },
+      "expect": {
+        "centavos": 0
+      }
+    },
+    {
+      "name": "annualisation true-up: 400,000 taxable for the year, 15,000 withheld -> 7,500 still due",
+      "kind": "annualise",
+      "input": {
+        "ytdTaxableCentavos": 30000000,
+        "ytdWithheldCentavos": 1000000,
+        "periodTaxableCentavos": 10000000,
+        "periodWithheldCentavos": 500000,
+        "table": {
+          "annualBrackets": [
+            {
+              "from": 0,
+              "to": 250000,
+              "base": 0,
+              "rate": 0
+            },
+            {
+              "from": 250000,
+              "to": 400000,
+              "base": 0,
+              "rate": 0.15
+            },
+            {
+              "from": 400000,
+              "to": 800000,
+              "base": 22500,
+              "rate": 0.2
+            },
+            {
+              "from": 800000,
+              "to": 2000000,
+              "base": 102500,
+              "rate": 0.25
+            },
+            {
+              "from": 2000000,
+              "to": 8000000,
+              "base": 402500,
+              "rate": 0.3
+            },
+            {
+              "from": 8000000,
+              "to": null,
+              "base": 2202500,
+              "rate": 0.35
+            }
+          ]
+        }
+      },
+      "expect": {
+        "annualTax": 2250000,
+        "withheld": 1500000,
+        "trueUp": 750000
+      }
+    },
+    {
+      "name": "engine end-to-end, minimum-wage monthly: SSS/PHIC/HDMF deducted, no tax, employer shares as cost",
+      "kind": "computePayslip",
+      "input": {
+        "terms": {
+          "payType": "monthly",
+          "basicRate": 16823.75,
+          "dailyRateBasis": "313",
+          "workWeek": "6_day",
+          "statutoryBasis": "basic",
+          "allowances": []
+        },
+        "period": {
+          "start": "2026-11-16",
+          "end": "2026-11-16"
+        },
+        "entries": [
+          {
+            "date": "2026-11-16",
+            "intervals": [
+              [
+                8,
+                12
+              ],
+              [
+                13,
+                17
+              ]
+            ]
+          }
+        ],
+        "tables": {
+          "sss": {
+            "totalRate": 0.15,
+            "employeeRate": 0.05,
+            "employerRate": 0.1,
+            "mscMin": 5000,
+            "mscMax": 35000,
+            "mscStep": 500,
+            "ec": {
+              "low": 10,
+              "high": 30,
+              "lowMaxMsc": 14500
+            },
+            "mpf": {
+              "mscThreshold": 20000,
+              "employeeRate": 0.05,
+              "employerRate": 0.1
+            }
+          },
+          "philhealth": {
+            "rate": 0.05,
+            "employeeShare": 0.025,
+            "employerShare": 0.025,
+            "floor": 10000,
+            "ceiling": 100000
+          },
+          "pagibig": {
+            "employeeRate": 0.02,
+            "employerRate": 0.02,
+            "employeeRateLow": 0.01,
+            "lowCompensationThreshold": 1500,
+            "maxFundSalary": 10000
+          },
+          "tax": {
+            "annualBrackets": [
+              {
+                "from": 0,
+                "to": 250000,
+                "base": 0,
+                "rate": 0
+              },
+              {
+                "from": 250000,
+                "to": 400000,
+                "base": 0,
+                "rate": 0.15
+              },
+              {
+                "from": 400000,
+                "to": 800000,
+                "base": 22500,
+                "rate": 0.2
+              },
+              {
+                "from": 800000,
+                "to": 2000000,
+                "base": 102500,
+                "rate": 0.25
+              },
+              {
+                "from": 2000000,
+                "to": 8000000,
+                "base": 402500,
+                "rate": 0.3
+              },
+              {
+                "from": 8000000,
+                "to": null,
+                "base": 2202500,
+                "rate": 0.35
+              }
+            ]
+          }
+        }
+      },
+      "expect": {
+        "codes": [
+          "BASIC"
+        ],
+        "deductionCodes": [
+          "HDMF",
+          "PHIC",
+          "SSS"
+        ],
+        "gross": 841188,
+        "totalDeductions": 73529,
+        "net": 767659,
+        "blocked": "PAYOUT_FEATURES_PENDING"
+      }
+    },
+    {
+      "name": "engine end-to-end: the SECOND cutoff pays the residue (one centavo more)",
+      "kind": "computePayslip",
+      "input": {
+        "terms": {
+          "payType": "monthly",
+          "basicRate": 16823.75,
+          "dailyRateBasis": "313",
+          "workWeek": "6_day",
+          "statutoryBasis": "basic",
+          "allowances": []
+        },
+        "period": {
+          "start": "2026-11-16",
+          "end": "2026-11-16"
+        },
+        "entries": [
+          {
+            "date": "2026-11-16",
+            "intervals": [
+              [
+                8,
+                12
+              ],
+              [
+                13,
+                17
+              ]
+            ]
+          }
+        ],
+        "tables": {
+          "sss": {
+            "totalRate": 0.15,
+            "employeeRate": 0.05,
+            "employerRate": 0.1,
+            "mscMin": 5000,
+            "mscMax": 35000,
+            "mscStep": 500,
+            "ec": {
+              "low": 10,
+              "high": 30,
+              "lowMaxMsc": 14500
+            },
+            "mpf": {
+              "mscThreshold": 20000,
+              "employeeRate": 0.05,
+              "employerRate": 0.1
+            }
+          },
+          "philhealth": {
+            "rate": 0.05,
+            "employeeShare": 0.025,
+            "employerShare": 0.025,
+            "floor": 10000,
+            "ceiling": 100000
+          },
+          "pagibig": {
+            "employeeRate": 0.02,
+            "employerRate": 0.02,
+            "employeeRateLow": 0.01,
+            "lowCompensationThreshold": 1500,
+            "maxFundSalary": 10000
+          },
+          "tax": {
+            "annualBrackets": [
+              {
+                "from": 0,
+                "to": 250000,
+                "base": 0,
+                "rate": 0
+              },
+              {
+                "from": 250000,
+                "to": 400000,
+                "base": 0,
+                "rate": 0.15
+              },
+              {
+                "from": 400000,
+                "to": 800000,
+                "base": 22500,
+                "rate": 0.2
+              },
+              {
+                "from": 800000,
+                "to": 2000000,
+                "base": 102500,
+                "rate": 0.25
+              },
+              {
+                "from": 2000000,
+                "to": 8000000,
+                "base": 402500,
+                "rate": 0.3
+              },
+              {
+                "from": 8000000,
+                "to": null,
+                "base": 2202500,
+                "rate": 0.35
+              }
+            ]
+          }
+        },
+        "cutoffIndex": 1
+      },
+      "expect": {
+        "totalDeductions": 73530,
+        "net": 767658
+      }
+    }
+  ]
+}
