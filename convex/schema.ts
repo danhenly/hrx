@@ -330,6 +330,114 @@ export default defineSchema({
     }).index("by_org_start", ["orgId", "startDate"]),
 
     /**
+     * A payroll run — one period, one version (D1). `status` runs
+     * draft → computed → reviewed → approved → paid, plus void. A recompute creates
+     * version + 1 and voids nothing; a paid run is immutable, so no mutation in this
+     * repo patches a payslip (D2).
+     */
+    payrollRuns: defineTable({
+        orgId: v.id("organizations"),
+        periodId: v.id("payrollPeriods"),
+        version: v.number(),
+        status: v.union(
+            v.literal("draft"),
+            v.literal("computed"),
+            v.literal("reviewed"),
+            v.literal("approved"),
+            v.literal("paid"),
+            v.literal("void"),
+        ),
+        totals: v.object({
+            gross: v.number(),
+            deductions: v.number(),
+            net: v.number(),
+            employerCost: v.number(),
+            employeeCount: v.number(),
+        }),
+        /** Employees this run could not compute, with the reason. Never silently skipped. */
+        blocked: v.array(v.object({ employeeId: v.id("employees"), reason: v.string() })),
+        computedAt: v.optional(v.number()),
+        reviewedAt: v.optional(v.number()),
+        approvedAt: v.optional(v.number()),
+        paidAt: v.optional(v.number()),
+        approvedBy: v.optional(v.id("users")),
+    })
+        .index("by_org_period", ["orgId", "periodId"])
+        .index("by_org_period_version", ["orgId", "periodId", "version"]),
+
+    payslips: defineTable({
+        orgId: v.id("organizations"),
+        runId: v.id("payrollRuns"),
+        employeeId: v.id("employees"),
+        gross: v.number(),
+        totalDeductions: v.number(),
+        net: v.number(),
+        /** Employer shares of statutory contributions — cost, never a deduction. */
+        employerCost: v.number(),
+        daysWorked: v.number(),
+        minutesWorked: v.number(),
+    })
+        .index("by_run", ["runId"])
+        .index("by_org_employee", ["orgId", "employeeId"]),
+
+    payslipLines: defineTable({
+        orgId: v.id("organizations"),
+        payslipId: v.id("payslips"),
+        runId: v.id("payrollRuns"),
+        kind: v.union(
+            v.literal("earning"),
+            v.literal("deduction"),
+            v.literal("employer_cost"),
+            v.literal("memo"),
+        ),
+        code: v.string(),
+        description: v.string(),
+        quantity: v.optional(v.number()),
+        rate: v.optional(v.number()),
+        amount: v.number(),
+        taxable: v.boolean(),
+        source: v.optional(v.object({ type: v.string(), id: v.string() })),
+    })
+        .index("by_payslip", ["payslipId"])
+        .index("by_org", ["orgId"]),
+
+    /**
+     * The frozen snapshot behind one payslip (§5, "snapshot the inputs").
+     *
+     * Without it, a recompute six months later cannot reproduce the register and
+     * "why is this different from what we filed" has no answer. It records the day
+     * records used, the pay terms resolved for the period, and the ids of the
+     * statutory-table versions in force — the payroll equivalent of Phase 1
+     * snapshotting `jobTitle` into position history.
+     */
+    payrollInputs: defineTable({
+        orgId: v.id("organizations"),
+        runId: v.id("payrollRuns"),
+        employeeId: v.id("employees"),
+        days: v.array(
+            v.object({
+                entryId: v.string(),
+                date: v.number(),
+                totalMinutes: v.number(),
+                intervals: v.array(v.object({ start: v.number(), end: v.number() })),
+                status: v.string(),
+            }),
+        ),
+        terms: v.any(),
+        tableIds: v.object({
+            sss: v.optional(v.string()),
+            philhealth: v.optional(v.string()),
+            pagibig: v.optional(v.string()),
+            tax: v.optional(v.string()),
+            deminimis: v.optional(v.string()),
+            holiday: v.optional(v.string()),
+        }),
+        computedAt: v.number(),
+    })
+        .index("by_run", ["runId"])
+        .index("by_org", ["orgId"]),
+
+    /**
      * Adjustments (D2) — a correction is a LINE applied to a period, never an edit
      * to a computed register. Created in P3 with the run; P1 only reads them.
      */

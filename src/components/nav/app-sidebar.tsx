@@ -1,6 +1,6 @@
 "use client";
 
-import { Clock, Cog, Users } from "lucide-react";
+import { Clock, Cog, Users, Wallet } from "lucide-react";
 import * as React from "react";
 import { Kbd } from "@/components/common/kbd";
 import { NavOverview } from "@/components/nav/nav-overview";
@@ -36,6 +36,11 @@ const data = {
       name: "Employees",
       url: "/dashboard/employees",
       icon: Users,
+    },
+    {
+      name: "Payroll",
+      url: "/dashboard/payroll",
+      icon: Wallet,
     },
     {
       name: "Settings",

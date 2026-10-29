@@ -3,6 +3,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
 import { mutation, query } from "./_generated/server";
 import { logAudit } from "./audit";
+import { entriesInFrozenRuns } from "./payroll/runs";
 import { validateIntervals } from "./lib/intervals";
 import { DAY_MS, PH_OFFSET_MS, manilaMidnight } from "./lib/week";
 import { requireAdmin, requireAuth, requireMembership } from "./helpers";
@@ -568,13 +569,29 @@ export const unlockDays = mutation({
         }
 
         const { entries, skipped } = await loadBatch(ctx, orgId, entryIds);
+
+        // D14: a day inside an approved or paid run cannot be reopened. Allowed to
+        // happen, the register would stop matching the days it was built from and no
+        // filed period could be reproduced. The path out is a void + new version.
+        const frozen = await entriesInFrozenRuns(ctx, orgId, entries);
+        const frozenSkips = entries
+            .filter((entry) => frozen.has(entry._id))
+            .map((entry) => ({
+                entryId: entry._id,
+                reason: `Locked by ${frozen.get(entry._id)} — void the run or raise an adjustment on the next period`,
+            }));
+        const unlockable = entries.filter((entry) => !frozen.has(entry._id));
+
         const result = await applyStatusBatch(
             ctx,
             { userId, role: "admin" },
-            entries,
+            unlockable,
             "unlock",
             trimmed,
         );
-        return { applied: result.applied, skipped: [...skipped, ...result.skipped] };
+        return {
+            applied: result.applied,
+            skipped: [...skipped, ...frozenSkips, ...result.skipped],
+        };
     },
 });

@@ -361,6 +361,9 @@ export const seedPayrollDataset = internalMutation({
                       lastName: FILLER_LAST[Math.floor(index / FILLER_FIRST.length) % FILLER_LAST.length],
                       payType: random() > 0.75 ? "daily" : "monthly",
                       basicRate: 0, // set below, from the list matching payType
+                      // Derived from the week below: a 5-day filler carrying 313 is
+                      // exactly the mismatch resolvePayTerms refuses to compute, and
+                      // the run then blocks that employee.
                       dailyRateBasis: "313",
                       workWeek: random() > 0.85 ? "5_day" : "6_day",
                       allowances: random() > 0.5 ? [RICE] : [],
@@ -370,6 +373,8 @@ export const seedPayrollDataset = internalMutation({
                       why: "filler",
                   };
             if (!persona) {
+                // The divisor must match the week (D7), or the row is unresolvable.
+                spec.dailyRateBasis = spec.workWeek === "5_day" ? "261" : "313";
                 // Defaults above leave basicRate 0; draw from the list that matches
                 // the pay type so the scale is plausible in both directions.
                 spec.basicRate =
@@ -632,6 +637,37 @@ export const teardownPayrollDataset = internalMutation({
         counts.allowanceTypes = allowanceTypes.length;
         await deleteAll(ctx, allowanceTypes.map((row) => row._id));
 
+        // P3's tables, in dependency order: lines before payslips before runs.
+        // A dataset that leaves a register behind cannot be removed, which §8.1c
+        // calls as severe as a miscalculation.
+        const payslipLines = await ctx.db
+            .query("payslipLines")
+            .withIndex("by_org", (q) => q.eq("orgId", orgId))
+            .collect();
+        counts.payslipLines = payslipLines.length;
+        await deleteAll(ctx, payslipLines.map((row) => row._id));
+
+        const payslips = await ctx.db
+            .query("payslips")
+            .withIndex("by_org_employee", (q) => q.eq("orgId", orgId))
+            .collect();
+        counts.payslips = payslips.length;
+        await deleteAll(ctx, payslips.map((row) => row._id));
+
+        const payrollInputs = await ctx.db
+            .query("payrollInputs")
+            .withIndex("by_org", (q) => q.eq("orgId", orgId))
+            .collect();
+        counts.payrollInputs = payrollInputs.length;
+        await deleteAll(ctx, payrollInputs.map((row) => row._id));
+
+        const payrollRuns = await ctx.db
+            .query("payrollRuns")
+            .withIndex("by_org_period", (q) => q.eq("orgId", orgId))
+            .collect();
+        counts.payrollRuns = payrollRuns.length;
+        await deleteAll(ctx, payrollRuns.map((row) => row._id));
+
         const periods = await ctx.db
             .query("payrollPeriods")
             .withIndex("by_org_start", (q) => q.eq("orgId", orgId))
@@ -707,6 +743,22 @@ export const verifyEmpty = internalMutation({
             .query("allowanceTypes")
             .withIndex("by_org", (q) => q.eq("orgId", orgId))
             .collect();
+        const payslipLines = await ctx.db
+            .query("payslipLines")
+            .withIndex("by_org", (q) => q.eq("orgId", orgId))
+            .collect();
+        const payslips = await ctx.db
+            .query("payslips")
+            .withIndex("by_org_employee", (q) => q.eq("orgId", orgId))
+            .collect();
+        const payrollInputs = await ctx.db
+            .query("payrollInputs")
+            .withIndex("by_org", (q) => q.eq("orgId", orgId))
+            .collect();
+        const payrollRuns = await ctx.db
+            .query("payrollRuns")
+            .withIndex("by_org_period", (q) => q.eq("orgId", orgId))
+            .collect();
         const payrollPeriods = await ctx.db
             .query("payrollPeriods")
             .withIndex("by_org_start", (q) => q.eq("orgId", orgId))
@@ -729,6 +781,10 @@ export const verifyEmpty = internalMutation({
             positions: positions.length,
             allowanceTypes: allowanceTypes.length,
             payrollPeriods: payrollPeriods.length,
+            payrollRuns: payrollRuns.length,
+            payslips: payslips.length,
+            payslipLines: payslipLines.length,
+            payrollInputs: payrollInputs.length,
             auditLogs: auditLogs.length,
             members: members.length,
             organizations,
@@ -738,3 +794,4 @@ export const verifyEmpty = internalMutation({
         return { orgId, counts, total, clean: total === 0 };
     },
 });
+
