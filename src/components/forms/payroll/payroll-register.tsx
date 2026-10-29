@@ -71,6 +71,9 @@ export function PayrollRegister({ orgId }: { orgId: Id<"organizations"> }) {
   const reviewRun = useMutation(api.payroll.runs.reviewRun);
   const approveRun = useMutation(api.payroll.runs.approveRun);
   const voidRun = useMutation(api.payroll.runs.voidRun);
+  const generateBankFile = useMutation(api.payroll.payout.generateBankFile);
+  const generateRunPack = useMutation(api.payroll.payout.generateRunPack);
+  const mintLink = useMutation(api.payroll.payslipLinks.mint);
 
   const [isPending, startTransition] = useTransition();
   const [addOpen, setAddOpen] = useState(false);
@@ -78,7 +81,9 @@ export function PayrollRegister({ orgId }: { orgId: Id<"organizations"> }) {
   const [end, setEnd] = useState("2026-11-24");
   const [pay, setPay] = useState("2026-11-30");
   const [openRunId, setOpenRunId] = useState<Id<"payrollRuns"> | null>(null);
-  const [openPayslipId, setOpenPayslipId] = useState<Id<"payslips"> | null>(null);
+  const [openPayslipId, setOpenPayslipId] = useState<Id<"payslips"> | null>(
+    null,
+  );
 
   const runDetail = useQuery(
     api.payroll.runs.get,
@@ -88,6 +93,17 @@ export function PayrollRegister({ orgId }: { orgId: Id<"organizations"> }) {
     api.payroll.runs.getPayslip,
     openPayslipId ? { payslipId: openPayslipId } : "skip",
   );
+
+  /** Save a generated artefact to the browser's downloads. */
+  function download(filename: string, content: string) {
+    const blob = new Blob([content], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = filename;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
 
   function act(label: string, fn: () => Promise<unknown>) {
     startTransition(async () => {
@@ -158,7 +174,8 @@ export function PayrollRegister({ orgId }: { orgId: Id<"organizations"> }) {
                     {manilaDate.format(new Date(period.endDate))}
                   </div>
                   <div className="text-muted-foreground text-xs">
-                    paid {manilaDate.format(new Date(period.payDate))} · {period.status}
+                    paid {manilaDate.format(new Date(period.payDate))} ·{" "}
+                    {period.status}
                   </div>
                 </div>
                 <Button
@@ -168,7 +185,10 @@ export function PayrollRegister({ orgId }: { orgId: Id<"organizations"> }) {
                   disabled={isPending}
                   onClick={() =>
                     act("Run opened", async () => {
-                      const result = await createRun({ orgId, periodId: period._id });
+                      const result = await createRun({
+                        orgId,
+                        periodId: period._id,
+                      });
                       setOpenRunId(result.runId);
                     })
                   }
@@ -199,7 +219,8 @@ export function PayrollRegister({ orgId }: { orgId: Id<"organizations"> }) {
                         </Badge>
                       )}
                       <div className="ml-auto flex flex-wrap gap-1">
-                        {(run.status === "draft" || run.status === "computed") && (
+                        {(run.status === "draft" ||
+                          run.status === "computed") && (
                           <Button
                             size="sm"
                             variant="secondary"
@@ -214,17 +235,26 @@ export function PayrollRegister({ orgId }: { orgId: Id<"organizations"> }) {
                             size="sm"
                             variant="outline"
                             disabled={isPending}
-                            onClick={() => act("Run reviewed", () => reviewRun({ runId: run._id }))}
+                            onClick={() =>
+                              act("Run reviewed", () =>
+                                reviewRun({ runId: run._id }),
+                              )
+                            }
                           >
                             Review
                           </Button>
                         )}
-                        {(run.status === "computed" || run.status === "reviewed") &&
+                        {(run.status === "computed" ||
+                          run.status === "reviewed") &&
                           isAdmin && (
                             <Button
                               size="sm"
                               disabled={isPending}
-                              onClick={() => act("Run approved — register frozen", () => approveRun({ runId: run._id }))}
+                              onClick={() =>
+                                act("Run approved — register frozen", () =>
+                                  approveRun({ runId: run._id }),
+                                )
+                              }
                             >
                               Approve
                             </Button>
@@ -236,21 +266,26 @@ export function PayrollRegister({ orgId }: { orgId: Id<"organizations"> }) {
                         >
                           Payslips
                         </Button>
-                        {isAdmin && run.status !== "void" && run.status !== "paid" && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="text-destructive hover:text-destructive"
-                            disabled={isPending}
-                            onClick={() =>
-                              act("Run voided", () =>
-                                voidRun({ runId: run._id, reason: "Voided from the register" }),
-                              )
-                            }
-                          >
-                            Void
-                          </Button>
-                        )}
+                        {isAdmin &&
+                          run.status !== "void" &&
+                          run.status !== "paid" && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-destructive hover:text-destructive"
+                              disabled={isPending}
+                              onClick={() =>
+                                act("Run voided", () =>
+                                  voidRun({
+                                    runId: run._id,
+                                    reason: "Voided from the register",
+                                  }),
+                                )
+                              }
+                            >
+                              Void
+                            </Button>
+                          )}
                       </div>
                     </div>
                   ))}
@@ -291,7 +326,12 @@ export function PayrollRegister({ orgId }: { orgId: Id<"organizations"> }) {
               disabled={isPending}
               onClick={() =>
                 act("Period created", async () => {
-                  await createPeriod({ orgId, startDate: start, endDate: end, payDate: pay });
+                  await createPeriod({
+                    orgId,
+                    startDate: start,
+                    endDate: end,
+                    payDate: pay,
+                  });
                   setAddOpen(false);
                 })
               }
@@ -327,6 +367,106 @@ export function PayrollRegister({ orgId }: { orgId: Id<"organizations"> }) {
             </SheetDescription>
           </SheetHeader>
 
+          {runDetail?.run &&
+            (runDetail.run.status === "approved" ||
+              runDetail.run.status === "paid") && (
+              <div className="no-print mx-4 mt-4 flex flex-wrap items-center gap-2">
+                <Button
+                  size="sm"
+                  disabled={isPending}
+                  onClick={() =>
+                    startTransition(async () => {
+                      try {
+                        const file = await generateBankFile({
+                          orgId,
+                          runId: runDetail.run._id,
+                          layoutId: "bdo",
+                        });
+                        download(file.filename, file.content);
+                        toast.success(
+                          `${file.filename} — ${file.rowCount} row(s), ${peso(file.total)}`,
+                        );
+                        if (!file.verified) {
+                          toast.warning(
+                            "BDO columns are NOT verified against the bank's sample — confirm before the first live payout",
+                          );
+                        }
+                        if (file.missing.length > 0) {
+                          toast.error(
+                            `${file.missing.length} employee(s) have no bank account and are NOT in the file`,
+                          );
+                        }
+                      } catch (error) {
+                        toast.error(
+                          (error as Error).message ??
+                            "Could not generate the file",
+                        );
+                      }
+                    })
+                  }
+                >
+                  BDO bank file
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={isPending}
+                  onClick={() =>
+                    startTransition(async () => {
+                      try {
+                        const file = await generateBankFile({
+                          orgId,
+                          runId: runDetail.run._id,
+                          layoutId: "generic",
+                        });
+                        download(file.filename, file.content);
+                      } catch (error) {
+                        toast.error(
+                          (error as Error).message ??
+                            "Could not generate the file",
+                        );
+                      }
+                    })
+                  }
+                >
+                  Generic file
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={isPending}
+                  onClick={() =>
+                    startTransition(async () => {
+                      try {
+                        const pack = await generateRunPack({
+                          orgId,
+                          runId: runDetail.run._id,
+                        });
+                        download(pack.filename, pack.content);
+                        toast.success("Run pack downloaded");
+                      } catch (error) {
+                        toast.error(
+                          (error as Error).message ??
+                            "Could not build the pack",
+                        );
+                      }
+                    })
+                  }
+                >
+                  Run pack
+                </Button>
+                <Button size="sm" variant="ghost" asChild>
+                  <a
+                    href={`/payslips/run/${runDetail.run._id}`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Print all payslips
+                  </a>
+                </Button>
+              </div>
+            )}
+
           {runDetail?.run.blocked.length ? (
             <div className="mx-4 mt-4 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-xs">
               <p className="font-medium">Blocked employees</p>
@@ -359,7 +499,9 @@ export function PayrollRegister({ orgId }: { orgId: Id<"organizations"> }) {
                   <TableBody>
                     {runDetail.payslips.map((payslip) => (
                       <TableRow key={payslip._id}>
-                        <TableCell className="text-xs">{payslip.employeeName}</TableCell>
+                        <TableCell className="text-xs">
+                          {payslip.employeeName}
+                        </TableCell>
                         <TableCell className="text-right text-xs">
                           {peso(payslip.gross)}
                         </TableCell>
@@ -370,13 +512,51 @@ export function PayrollRegister({ orgId }: { orgId: Id<"organizations"> }) {
                           {peso(payslip.net)}
                         </TableCell>
                         <TableCell className="text-right">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => setOpenPayslipId(payslip._id)}
-                          >
-                            Lines
-                          </Button>
+                          <div className="no-print flex justify-end gap-1">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => setOpenPayslipId(payslip._id)}
+                            >
+                              Lines
+                            </Button>
+                            <Button size="sm" variant="ghost" asChild>
+                              <a
+                                href={`/payslips/${payslip._id}`}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                Print
+                              </a>
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              disabled={isPending}
+                              onClick={() =>
+                                startTransition(async () => {
+                                  try {
+                                    const link = await mintLink({
+                                      orgId,
+                                      payslipId: payslip._id,
+                                    });
+                                    const url = `${window.location.origin}/payslip/${link.token}`;
+                                    await navigator.clipboard.writeText(url);
+                                    toast.success(
+                                      "Portal link copied (valid 30 days)",
+                                    );
+                                  } catch (error) {
+                                    toast.error(
+                                      (error as Error).message ??
+                                        "Could not create the link",
+                                    );
+                                  }
+                                })
+                              }
+                            >
+                              Portal link
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -408,11 +588,16 @@ export function PayrollRegister({ orgId }: { orgId: Id<"organizations"> }) {
                       <TableBody>
                         {payslipDetail.lines.map((line) => (
                           <TableRow key={line._id}>
-                            <TableCell className="font-mono text-xs">{line.code}</TableCell>
+                            <TableCell className="font-mono text-xs">
+                              {line.code}
+                            </TableCell>
                             <TableCell className="text-xs">
                               {line.description}
                               {line.kind === "employer_cost" ? (
-                                <span className="text-muted-foreground"> (employer cost)</span>
+                                <span className="text-muted-foreground">
+                                  {" "}
+                                  (employer cost)
+                                </span>
                               ) : null}
                             </TableCell>
                             <TableCell className="text-right text-xs">

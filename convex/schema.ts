@@ -438,6 +438,52 @@ export default defineSchema({
         .index("by_org", ["orgId"]),
 
     /**
+     * A generated artefact stored against the run (D11): the bank file, the run pack,
+     * a payslip set. `sha256` is the fingerprint of exactly the bytes that were
+     * produced, so a re-download can be proven identical to what was approved.
+     */
+    payrollArtefacts: defineTable({
+        orgId: v.id("organizations"),
+        runId: v.id("payrollRuns"),
+        kind: v.union(
+            v.literal("bank_file"),
+            v.literal("run_pack"),
+            v.literal("register_csv"),
+        ),
+        /** Layout id for a bank file (bdo, generic); "" for the others. */
+        layout: v.string(),
+        filename: v.string(),
+        content: v.string(),
+        sha256: v.string(),
+        rowCount: v.number(),
+        total: v.number(),
+        createdBy: v.id("users"),
+        createdAt: v.number(),
+    })
+        .index("by_run", ["runId"])
+        .index("by_org", ["orgId"]),
+
+    /**
+     * A tokenised link to ONE payslip (D13: an employee sees only their own payslip,
+     * with no HR account). The token is random, expiring and revocable; the public
+     * query resolves the token to its own payslip and to nothing else.
+     */
+    payslipLinks: defineTable({
+        orgId: v.id("organizations"),
+        runId: v.id("payrollRuns"),
+        payslipId: v.id("payslips"),
+        employeeId: v.id("employees"),
+        token: v.string(),
+        expiresAt: v.number(),
+        createdBy: v.id("users"),
+        createdAt: v.number(),
+        revokedAt: v.optional(v.number()),
+    })
+        .index("by_token", ["token"])
+        .index("by_payslip", ["payslipId"])
+        .index("by_org", ["orgId"]),
+
+    /**
      * Adjustments (D2) — a correction is a LINE applied to a period, never an edit
      * to a computed register. Created in P3 with the run; P1 only reads them.
      */
