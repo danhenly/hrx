@@ -5,6 +5,66 @@ import { v } from "convex/values";
 // role enum shared across members & invitations
 export const roleValidator = v.union(v.literal("admin"), v.literal("hr"));
 
+// ─── Payroll validators (Phase 2, P0) ──────────────────────────────────────
+// Exported so mutations accept exactly the union the schema stores — a second
+// hand-written copy is how the two drift.
+
+/** How the person is paid. Decides whether an unworked holiday pays (D8). */
+export const payTypeValidator = v.union(
+    v.literal("monthly"),
+    v.literal("daily"),
+    v.literal("hourly"),
+);
+
+/** Divisor behind the daily rate (D7). 261/313 reproduce DOLE's worked examples. */
+export const dailyRateBasisValidator = v.union(
+    v.literal("261"),
+    v.literal("313"),
+    v.literal("22"),
+    v.literal("26"),
+);
+
+export const workWeekValidator = v.union(v.literal("5_day"), v.literal("6_day"));
+
+/** Contribution/tax base (D-PILOT-3). Org default with an optional per-position override. */
+export const statutoryBasisValidator = v.union(
+    v.literal("gross_taxable"),
+    v.literal("basic"),
+    v.literal("gross"),
+);
+
+/** One allowance attached to a position row (D15). */
+export const allowanceValidator = v.object({
+    code: v.string(),                       // key into allowanceTypes (RICE, TRANSPO, …)
+    description: v.string(),
+    amount: v.number(),                     // pesos, per the allowance type's unit
+    taxable: v.boolean(),
+    deMinimisCategory: v.optional(v.string()), // key into statutoryTables('deminimis')
+});
+
+/** Org payroll conventions — one row of settings, so a convention change is one edit (D15/D17). */
+export const payrollSettingsValidator = v.object({
+    workWeek: workWeekValidator,
+    periodType: v.literal("semi_monthly"),
+    cutoffDays: v.array(v.number()),        // [10, 25] for the pilot
+    payDays: v.array(v.number()),           // [15, 30]
+    statutoryBasis: statutoryBasisValidator,
+    dailyRateBasis: dailyRateBasisValidator,
+    /** TRUE only on a generated dataset. Teardown REFUSES when false (§8.1c). */
+    isTestOrg: v.boolean(),
+});
+
+/** Statutory table kinds. `holiday` is here because §6.1 takes the holiday
+ *  calendar from statutoryTables(kind:'holiday') and P0.4 requires it as data. */
+export const statutoryKindValidator = v.union(
+    v.literal("sss"),
+    v.literal("philhealth"),
+    v.literal("pagibig"),
+    v.literal("tax"),
+    v.literal("deminimis"),
+    v.literal("holiday"),
+);
+
 export default defineSchema({
     // Convex Auth tables: users, authAccounts, authSessions,
     // authRefreshTokens, authVerificationCodes, authRateLimits
@@ -21,6 +81,8 @@ export default defineSchema({
         state: v.optional(v.string()),
         country: v.optional(v.string()),
         createdBy: v.id("users"),
+        /** Absent on every pre-P0 org — resolvePayTerms() supplies the defaults. */
+        payrollSettings: v.optional(payrollSettingsValidator),
     }),
 
     /**
@@ -73,6 +135,10 @@ export default defineSchema({
             v.literal("terminated"),
             v.literal("on_leave"),
         ),
+        /** BIR tax status code (S, M, ME, …). Annual-relevant, so it belongs to
+         *  the person rather than the position (plan §5). */
+        taxStatus: v.optional(v.string()),
+        taxStatusUpdatedAt: v.optional(v.number()),
     })
         .index("by_org", ["orgId"])
         .index("by_org_status", ["orgId", "status"]),
@@ -91,6 +157,23 @@ export default defineSchema({
         endDate: v.optional(v.number()),     // Unix ms — null / absent = still current
         notes: v.optional(v.string()),
         positionId: v.optional(v.id("positions")),   // absent on pre-masterlist rows
+
+        // ─── Pay terms (D15) ───────────────────────────────────────────────
+        // Optional on purpose: this table already ships Phase 1 rows, so every
+        // field resolves through resolvePayTerms() with a documented default
+        // instead of throwing (P0.1).
+        payType: v.optional(payTypeValidator),
+        /** Per-position override of the org's statutory basis. */
+        statutoryBasis: v.optional(statutoryBasisValidator),
+        /** Monthly / daily / hourly rate, matching payType. When payType is
+         *  monthly, `salary` (gross annual) === basicRate * 12. */
+        basicRate: v.optional(v.number()),
+        dailyRateBasis: v.optional(dailyRateBasisValidator),
+        workWeek: v.optional(workWeekValidator),
+        allowances: v.optional(v.array(allowanceValidator)),
+        /** Stored for display only — the engine recomputes it from `allowances`
+         *  and a fixture asserts the two agree (D15). */
+        allowanceTotal: v.optional(v.number()),
     })
         .index("by_employee", ["employeeId"])
         .index("by_org", ["orgId"])
@@ -156,6 +239,95 @@ export default defineSchema({
         .index("by_org", ["orgId"])
         .index("by_org_employee_date", ["orgId", "employeeId", "date"])
         .index("by_org_date", ["orgId", "date"]),
+
+    // ─── Payroll (Phase 2) ──────────────────────────────────────────────────
+
+    /**
+     * Government numbers and the ATM/bank account (D16). One row per employee,
+     * in its own table so D13 can gate it separately from salary data: these do
+     * not change when pay changes and must never be duplicated per position.
+     * Payroll refuses to compute a payslip whose required IDs are missing.
+     */
+    employeeStatutoryIds: defineTable({
+        orgId: v.id("organizations"),
+        employeeId: v.id("employees"),
+        sssNumber: v.optional(v.string()),
+        philhealthNumber: v.optional(v.string()),
+        pagibigNumber: v.optional(v.string()),
+        tin: v.optional(v.string()),
+        bank: v.optional(
+            v.object({
+                bank: v.string(),               // "BDO" for the pilot (D-PILOT-7)
+                accountName: v.string(),
+                accountNumber: v.string(),
+                accountType: v.union(
+                    v.literal("atm"),
+                    v.literal("savings"),
+                    v.literal("current"),
+                ),
+            }),
+        ),
+        /** UMID, driver's licence, passport, … */
+        otherIds: v.optional(
+            v.array(v.object({ label: v.string(), value: v.string() })),
+        ),
+        updatedBy: v.id("users"),
+        updatedAt: v.number(),
+    }).index("by_org_employee", ["orgId", "employeeId"]),
+
+    /**
+     * Statutory tables (D17) — the published SSS / PhilHealth / Pag-IBIG / BIR /
+     * de minimis / holiday data, versioned by effective date. Every number the
+     * engine uses is a row here, never a constant in a computation function.
+     *
+     * Deliberately NOT org-scoped: these are national schedules, identical for
+     * every tenant. Rows are editable in the app (statutoryTables.upsert) so a
+     * new schedule is entered before it applies, with a source citation.
+     */
+    statutoryTables: defineTable({
+        kind: statutoryKindValidator,
+        effectiveFrom: v.number(),              // Manila midnight, Unix ms
+        effectiveTo: v.optional(v.number()),    // closed by the next row's start
+        payload: v.any(),                       // bands/schedule as published
+        source: v.string(),                     // citation captured at seed time
+    }).index("by_kind_effective", ["kind", "effectiveFrom"]),
+
+    /**
+     * Allowance catalogue (§2.6) — codes are org data, seeded with the
+     * PH-standard set and editable. `employeePositions.allowances[].code`
+     * references this.
+     */
+    allowanceTypes: defineTable({
+        orgId: v.id("organizations"),
+        code: v.string(),                       // RICE, LAUNDRY, UNIFORM, TRANSPO, …
+        description: v.string(),
+        unit: v.union(
+            v.literal("monthly"),
+            v.literal("semi_monthly"),
+            v.literal("annual"),
+            v.literal("per_day"),
+            v.literal("per_period"),
+        ),
+        taxable: v.boolean(),
+        deMinimisKind: v.optional(v.string()),  // key into statutoryTables('deminimis')
+        active: v.boolean(),
+    })
+        .index("by_org", ["orgId"])
+        .index("by_org_code", ["orgId", "code"]),
+
+    /**
+     * Payroll periods (D1) — three dates, never "the month". Built by P3; P0
+     * creates the table so the seed dataset and P1 previews have a period to
+     * point at.
+     */
+    payrollPeriods: defineTable({
+        orgId: v.id("organizations"),
+        periodType: v.literal("semi_monthly"),
+        startDate: v.number(),                  // Manila midnight
+        endDate: v.number(),                    // Manila midnight, inclusive
+        payDate: v.number(),                    // Manila midnight
+        status: v.union(v.literal("open"), v.literal("closed")),
+    }).index("by_org_start", ["orgId", "startDate"]),
 
     // ─── Audit ──────────────────────────────────────────────────────────────
 

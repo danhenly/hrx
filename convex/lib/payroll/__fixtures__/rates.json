@@ -1,0 +1,272 @@
+{
+  "description": "rates.ts \u2014 D7 rate derivation, period basic pay, proration, allowance totals (P0.3). Money assertions are integer centavos.",
+  "cases": [
+    {
+      "name": "min-wage-5day: monthly 14,028.75 over 261 divides back to the 645.00 statutory daily rate",
+      "kind": "dailyRate",
+      "input": {
+        "terms": {
+          "payType": "monthly",
+          "basicRate": 14028.75,
+          "dailyRateBasis": "261",
+          "workWeek": "5_day",
+          "statutoryBasis": "basic",
+          "allowances": []
+        }
+      },
+      "expect": {
+        "dailyCentavos": 64500,
+        "hourlyCentavos": 8063,
+        "derivation": "PHP 14028.75/month \u00d7 12 \u00f7 261 = PHP 645.00/day"
+      }
+    },
+    {
+      "name": "min-wage-6day: monthly 16,823.75 over 313 divides back to 645.00",
+      "kind": "dailyRate",
+      "input": {
+        "terms": {
+          "payType": "monthly",
+          "basicRate": 16823.75,
+          "dailyRateBasis": "313",
+          "workWeek": "6_day",
+          "statutoryBasis": "basic",
+          "allowances": []
+        }
+      },
+      "expect": {
+        "dailyCentavos": 64500,
+        "hourlyCentavos": 8063
+      }
+    },
+    {
+      "name": "monthly full semi-monthly period pays half the monthly rate",
+      "kind": "periodBasicPay",
+      "input": {
+        "terms": {
+          "payType": "monthly",
+          "basicRate": 30000,
+          "dailyRateBasis": "313",
+          "workWeek": "6_day",
+          "statutoryBasis": "basic",
+          "allowances": []
+        },
+        "periodStart": "2026-11-01",
+        "periodEnd": "2026-11-15"
+      },
+      "expect": {
+        "centavos": 1500000
+      }
+    },
+    {
+      "name": "mid-month hire prorates on the WORK-WEEK calendar: 5 of 12 scheduled days",
+      "kind": "periodBasicPay",
+      "input": {
+        "terms": {
+          "payType": "monthly",
+          "basicRate": 30000,
+          "dailyRateBasis": "313",
+          "workWeek": "6_day",
+          "statutoryBasis": "basic",
+          "allowances": []
+        },
+        "periodStart": "2026-11-01",
+        "periodEnd": "2026-11-15",
+        "employmentStart": "2026-11-10"
+      },
+      "expect": {
+        "centavos": 625000
+      }
+    },
+    {
+      "name": "hire after the period closes pays nothing and does not throw",
+      "kind": "periodBasicPay",
+      "input": {
+        "terms": {
+          "payType": "monthly",
+          "basicRate": 30000,
+          "dailyRateBasis": "313",
+          "workWeek": "6_day",
+          "statutoryBasis": "basic",
+          "allowances": []
+        },
+        "periodStart": "2026-11-01",
+        "periodEnd": "2026-11-15",
+        "employmentStart": "2026-11-20"
+      },
+      "expect": {
+        "centavos": 0
+      }
+    },
+    {
+      "name": "daily-paid full period is rate x 12 working days",
+      "kind": "periodBasicPay",
+      "input": {
+        "terms": {
+          "payType": "daily",
+          "basicRate": 645,
+          "dailyRateBasis": "313",
+          "workWeek": "6_day",
+          "statutoryBasis": "basic",
+          "allowances": []
+        },
+        "periodStart": "2026-11-01",
+        "periodEnd": "2026-11-15"
+      },
+      "expect": {
+        "centavos": 774000
+      }
+    },
+    {
+      "name": "prorate is exact when it divides evenly",
+      "kind": "prorate",
+      "input": {
+        "amountCentavos": 1500000,
+        "portion": 5,
+        "whole": 12
+      },
+      "expect": {
+        "centavos": 625000
+      }
+    },
+    {
+      "name": "prorate rounds HALF-UP (12.5 -> 13)",
+      "kind": "prorate",
+      "input": {
+        "amountCentavos": 100,
+        "portion": 1,
+        "whole": 8
+      },
+      "expect": {
+        "centavos": 13
+      }
+    },
+    {
+      "name": "prorate with a zero denominator pays nothing (no division by zero)",
+      "kind": "prorate",
+      "input": {
+        "amountCentavos": 100,
+        "portion": 1,
+        "whole": 0
+      },
+      "expect": {
+        "centavos": 0
+      }
+    },
+    {
+      "name": "allowance total recomputes from the list and matches the stored figure (D15)",
+      "kind": "allowanceTotal",
+      "input": {
+        "allowances": [
+          {
+            "code": "RICE",
+            "description": "Rice subsidy",
+            "amount": 2500,
+            "taxable": false,
+            "deMinimisCategory": "RICE"
+          },
+          {
+            "code": "LAUNDRY",
+            "description": "Laundry allowance",
+            "amount": 400,
+            "taxable": false,
+            "deMinimisCategory": "LAUNDRY"
+          },
+          {
+            "code": "TRANSPO",
+            "description": "Transportation allowance",
+            "amount": 1500,
+            "taxable": true
+          }
+        ],
+        "storedTotalPesos": 4400
+      },
+      "expect": {
+        "recomputed": 440000,
+        "matches": true
+      }
+    },
+    {
+      "name": "a hand-edited allowance total is a mismatch, not a tolerance (D15)",
+      "kind": "allowanceTotal",
+      "input": {
+        "allowances": [
+          {
+            "code": "RICE",
+            "description": "Rice subsidy",
+            "amount": 2500,
+            "taxable": false
+          }
+        ],
+        "storedTotalPesos": 5000
+      },
+      "expect": {
+        "recomputed": 250000,
+        "matches": false
+      }
+    },
+    {
+      "name": "resolve: a pre-P0 row with only an annual salary resolves to a monthly rate",
+      "kind": "resolve",
+      "input": {
+        "position": {
+          "salary": 360000
+        }
+      },
+      "expect": {
+        "payType": "monthly",
+        "basicRate": 30000,
+        "dailyRateBasis": "313",
+        "workWeek": "6_day",
+        "statutoryBasis": "basic",
+        "issueCount": 0
+      }
+    },
+    {
+      "name": "resolve: 5-day week without a stated divisor gets 261",
+      "kind": "resolve",
+      "input": {
+        "position": {
+          "workWeek": "5_day",
+          "salary": 168345
+        }
+      },
+      "expect": {
+        "payType": "monthly",
+        "basicRate": 14028.75,
+        "dailyRateBasis": "261",
+        "workWeek": "5_day",
+        "issueCount": 0
+      }
+    },
+    {
+      "name": "resolve: a daily-paid row with no rate is REPORTED, never guessed from the annual salary",
+      "kind": "resolve",
+      "input": {
+        "position": {
+          "payType": "daily",
+          "salary": 360000
+        }
+      },
+      "expect": {
+        "basicRate": 0,
+        "issueCount": 1
+      }
+    },
+    {
+      "name": "resolve: a 5-day week paired with the 313 divisor is flagged (~17% understated daily rate)",
+      "kind": "resolve",
+      "input": {
+        "position": {
+          "payType": "monthly",
+          "basicRate": 20000,
+          "workWeek": "5_day",
+          "dailyRateBasis": "313"
+        }
+      },
+      "expect": {
+        "dailyRateBasis": "313",
+        "issueCount": 1
+      }
+    }
+  ]
+}

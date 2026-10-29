@@ -31,6 +31,12 @@ const settings = [
     href: "/dashboard/settings/positions",
   },
   {
+    title: "Payroll",
+    description:
+      "Statutory tables with effective dates, and the org's payroll conventions.",
+    href: "/dashboard/settings/payroll",
+  },
+  {
     title: "Audit log",
     description: "View the trail of membership and approval changes.",
     href: "/dashboard/settings/audit",

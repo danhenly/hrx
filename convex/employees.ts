@@ -3,6 +3,29 @@ import type { Doc } from "./_generated/dataModel";
 import { logAudit } from "./audit";
 import { mutation, query } from "./_generated/server";
 import { requireAdmin, requireAuth, requireMembership } from "./helpers";
+import { annualSalaryFor } from "./lib/payroll/rates";
+import {
+    allowanceValidator,
+    dailyRateBasisValidator,
+    payTypeValidator,
+    statutoryBasisValidator,
+    workWeekValidator,
+} from "./schema";
+
+/**
+ * Pay terms on a position row (D15). Every field is optional so Phase 1 rows and
+ * the old two-field form keep working; the form sends them spelled out, and
+ * `salary` is DERIVED here rather than accepted twice.
+ */
+const payTermsArgs = {
+    payType: v.optional(payTypeValidator),
+    basicRate: v.optional(v.number()),
+    dailyRateBasis: v.optional(dailyRateBasisValidator),
+    workWeek: v.optional(workWeekValidator),
+    statutoryBasis: v.optional(statutoryBasisValidator),
+    allowances: v.optional(v.array(allowanceValidator)),
+    allowanceTotal: v.optional(v.number()),
+};
 
 // ─── Validators ────────────────────────────────────────────────────────────
 
@@ -187,6 +210,7 @@ export const addPosition = mutation({
         salary: v.optional(v.number()),
         effectiveDate: v.number(),
         notes: v.optional(v.string()),
+        ...payTermsArgs,
     },
     handler: async (ctx, { employeeId, positionId, ...fields }) => {
         const userId = await requireAuth(ctx);
@@ -230,13 +254,52 @@ export const addPosition = mutation({
             throw new ConvexError("Salary cannot be negative");
         }
 
+        // D15: `salary` is the gross annual figure and must agree with the rate.
+        // Derive it from the pay terms when they are present, so a form can never
+        // submit two different statements of the same pay.
+        const {
+            payType,
+            basicRate,
+            dailyRateBasis,
+            workWeek,
+            statutoryBasis,
+            allowances,
+            allowanceTotal,
+            ...rest
+        } = fields;
+        let salary = rest.salary;
+        if (payType !== undefined && basicRate !== undefined) {
+            const derived = annualSalaryFor({
+                payType,
+                basicRate,
+                dailyRateBasis: dailyRateBasis ?? "313",
+                workWeek: workWeek ?? "6_day",
+                statutoryBasis: statutoryBasis ?? "basic",
+                allowances: [],
+            });
+            if (salary !== undefined && Math.abs(salary - derived) > 0.01) {
+                throw new ConvexError(
+                    `Annual salary (${salary}) contradicts the rate terms (${derived}) — send one or the other`,
+                );
+            }
+            salary = derived;
+        }
+
         const positionRowId = await ctx.db.insert("employeePositions", {
             orgId: employee.orgId,
             employeeId,
             positionId,
             jobTitle: masterPosition.name,          // snapshot — history must not follow renames
             department: masterPosition.department,  // snapshot
-            ...fields,
+            ...rest,
+            salary,
+            payType,
+            basicRate,
+            dailyRateBasis,
+            workWeek,
+            statutoryBasis,
+            allowances,
+            allowanceTotal,
         });
         await logAudit(ctx, {
             orgId: employee.orgId,
@@ -260,6 +323,7 @@ export const updatePosition = mutation({
         effectiveDate: v.optional(v.number()),
         endDate: v.optional(v.number()),
         notes: v.optional(v.string()),
+        ...payTermsArgs,
     },
     handler: async (ctx, { positionId, positionRefId, ...fields }) => {
         const userId = await requireAuth(ctx);
@@ -293,6 +357,19 @@ export const updatePosition = mutation({
         }
 
         if (fields.salary !== undefined) patch.salary = fields.salary;
+        if (fields.payType !== undefined) patch.payType = fields.payType;
+        if (fields.basicRate !== undefined) patch.basicRate = fields.basicRate;
+        if (fields.dailyRateBasis !== undefined) {
+            patch.dailyRateBasis = fields.dailyRateBasis;
+        }
+        if (fields.workWeek !== undefined) patch.workWeek = fields.workWeek;
+        if (fields.statutoryBasis !== undefined) {
+            patch.statutoryBasis = fields.statutoryBasis;
+        }
+        if (fields.allowances !== undefined) patch.allowances = fields.allowances;
+        if (fields.allowanceTotal !== undefined) {
+            patch.allowanceTotal = fields.allowanceTotal;
+        }
         if (fields.effectiveDate !== undefined) patch.effectiveDate = fields.effectiveDate;
         if (fields.endDate !== undefined) patch.endDate = fields.endDate;
         if (fields.notes !== undefined) patch.notes = fields.notes;

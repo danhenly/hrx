@@ -1,0 +1,364 @@
+{
+  "description": "calendar.ts + tax.ts \u2014 Manila day classification, rest days, work-day counts, date round-trips and the \u00a76.4 semi-monthly derivation (P0.4).",
+  "holidays": [
+    {
+      "date": "2026-01-01",
+      "name": "New Year's Day",
+      "type": "regular"
+    },
+    {
+      "date": "2026-02-25",
+      "name": "EDSA People Power Revolution Anniversary",
+      "type": "special_working"
+    },
+    {
+      "date": "2026-08-31",
+      "name": "National Heroes Day",
+      "type": "regular"
+    },
+    {
+      "date": "2026-11-01",
+      "name": "All Saints' Day",
+      "type": "special_non_working"
+    },
+    {
+      "date": "2026-12-25",
+      "name": "Christmas Day",
+      "type": "regular"
+    }
+  ],
+  "cases": [
+    {
+      "name": "a holiday on a Sunday is still classified, and is ALSO a rest day (two independent axes)",
+      "kind": "classify",
+      "input": {
+        "date": "2026-11-01",
+        "workWeek": "6_day"
+      },
+      "expect": {
+        "dayType": "special_non_working",
+        "isRestDay": true,
+        "holidayName": "All Saints' Day"
+      }
+    },
+    {
+      "name": "regular holiday on a Monday: paid day, not a rest day",
+      "kind": "classify",
+      "input": {
+        "date": "2026-08-31",
+        "workWeek": "6_day"
+      },
+      "expect": {
+        "dayType": "regular",
+        "isRestDay": false,
+        "holidayName": "National Heroes Day"
+      }
+    },
+    {
+      "name": "special working day is a day type, not a rest day",
+      "kind": "classify",
+      "input": {
+        "date": "2026-02-25",
+        "workWeek": "6_day"
+      },
+      "expect": {
+        "dayType": "special_working",
+        "isRestDay": false,
+        "holidayName": "EDSA People Power Revolution Anniversary"
+      }
+    },
+    {
+      "name": "ordinary Wednesday",
+      "kind": "classify",
+      "input": {
+        "date": "2026-07-15",
+        "workWeek": "6_day"
+      },
+      "expect": {
+        "dayType": "ordinary",
+        "isRestDay": false,
+        "holidayName": null
+      }
+    },
+    {
+      "name": "Saturday is a rest day on a 5-day week",
+      "kind": "classify",
+      "input": {
+        "date": "2026-07-18",
+        "workWeek": "5_day"
+      },
+      "expect": {
+        "dayType": "ordinary",
+        "isRestDay": true,
+        "holidayName": null
+      }
+    },
+    {
+      "name": "Saturday is a WORKING day on a 6-day week",
+      "kind": "classify",
+      "input": {
+        "date": "2026-07-18",
+        "workWeek": "6_day"
+      },
+      "expect": {
+        "dayType": "ordinary",
+        "isRestDay": false,
+        "holidayName": null
+      }
+    },
+    {
+      "name": "work days in a 6-day cutoff (holidays are NOT subtracted \u2014 they are priced lines, D8)",
+      "kind": "workDays",
+      "input": {
+        "start": "2026-11-01",
+        "end": "2026-11-15",
+        "workWeek": "6_day"
+      },
+      "expect": {
+        "days": 12
+      }
+    },
+    {
+      "name": "work days in the same cutoff on a 5-day week",
+      "kind": "workDays",
+      "input": {
+        "start": "2026-11-01",
+        "end": "2026-11-15",
+        "workWeek": "5_day"
+      },
+      "expect": {
+        "days": 10
+      }
+    },
+    {
+      "name": "a date key round-trips through Manila midnight",
+      "kind": "dateKeyRoundTrip",
+      "input": {
+        "date": "2026-11-10"
+      },
+      "expect": {
+        "key": "2026-11-10"
+      }
+    },
+    {
+      "name": "16:30 UTC is already the NEXT Manila day (the Phase 1 off-by-one)",
+      "kind": "dateKeyOfInstant",
+      "input": {
+        "instant": "2026-11-09T16:30:00Z"
+      },
+      "expect": {
+        "key": "2026-11-10"
+      }
+    },
+    {
+      "name": "02:00 UTC is 10:00 Manila, same day",
+      "kind": "dateKeyOfInstant",
+      "input": {
+        "instant": "2026-11-10T02:00:00Z"
+      },
+      "expect": {
+        "key": "2026-11-10"
+      }
+    },
+    {
+      "name": "a day that does not exist is refused, not rolled over",
+      "kind": "dateKeyRoundTrip",
+      "input": {
+        "date": "2026-02-30"
+      },
+      "expectError": "does not exist"
+    },
+    {
+      "name": "a malformed date key is refused",
+      "kind": "dateKeyRoundTrip",
+      "input": {
+        "date": "10/11/2026"
+      },
+      "expectError": "expected YYYY-MM-DD"
+    },
+    {
+      "name": "semi-monthly withholding: 20,000 taxable in a cutoff",
+      "kind": "taxSemiMonthly",
+      "input": {
+        "taxableCutoffPesos": 20000,
+        "annualBrackets": [
+          {
+            "from": 0,
+            "to": 250000,
+            "base": 0,
+            "rate": 0
+          },
+          {
+            "from": 250000,
+            "to": 400000,
+            "base": 0,
+            "rate": 0.15
+          },
+          {
+            "from": 400000,
+            "to": 800000,
+            "base": 22500,
+            "rate": 0.2
+          },
+          {
+            "from": 800000,
+            "to": 2000000,
+            "base": 102500,
+            "rate": 0.25
+          },
+          {
+            "from": 2000000,
+            "to": 8000000,
+            "base": 402500,
+            "rate": 0.3
+          },
+          {
+            "from": 8000000,
+            "to": null,
+            "base": 2202500,
+            "rate": 0.35
+          }
+        ]
+      },
+      "expect": {
+        "pesos": 1604.17
+      }
+    },
+    {
+      "name": "semi-monthly withholding equals the annual table applied to the annualised income (\u00a76.4 invariant)",
+      "kind": "taxInvariance",
+      "input": {
+        "taxableCutoffPesos": 20000,
+        "annualBrackets": [
+          {
+            "from": 0,
+            "to": 250000,
+            "base": 0,
+            "rate": 0
+          },
+          {
+            "from": 250000,
+            "to": 400000,
+            "base": 0,
+            "rate": 0.15
+          },
+          {
+            "from": 400000,
+            "to": 800000,
+            "base": 22500,
+            "rate": 0.2
+          },
+          {
+            "from": 800000,
+            "to": 2000000,
+            "base": 102500,
+            "rate": 0.25
+          },
+          {
+            "from": 2000000,
+            "to": 8000000,
+            "base": 402500,
+            "rate": 0.3
+          },
+          {
+            "from": 8000000,
+            "to": null,
+            "base": 2202500,
+            "rate": 0.35
+          }
+        ]
+      },
+      "expect": {
+        "equal": true
+      }
+    },
+    {
+      "name": "semi-monthly boundaries are the annual boundaries / 24",
+      "kind": "taxBracketSlices",
+      "input": {
+        "annualBrackets": [
+          {
+            "from": 0,
+            "to": 250000,
+            "base": 0,
+            "rate": 0
+          },
+          {
+            "from": 250000,
+            "to": 400000,
+            "base": 0,
+            "rate": 0.15
+          },
+          {
+            "from": 400000,
+            "to": 800000,
+            "base": 22500,
+            "rate": 0.2
+          },
+          {
+            "from": 800000,
+            "to": 2000000,
+            "base": 102500,
+            "rate": 0.25
+          },
+          {
+            "from": 2000000,
+            "to": 8000000,
+            "base": 402500,
+            "rate": 0.3
+          },
+          {
+            "from": 8000000,
+            "to": null,
+            "base": 2202500,
+            "rate": 0.35
+          }
+        ]
+      },
+      "expect": {
+        "count": 6,
+        "bases": [
+          0,
+          0,
+          937.5,
+          4270.833333,
+          16770.833333,
+          91770.833333
+        ],
+        "lastTo": null
+      }
+    },
+    {
+      "name": "a tax table with a gap between brackets is refused (it would under-withhold everyone above the gap)",
+      "kind": "taxBracketSlices",
+      "input": {
+        "annualBrackets": [
+          {
+            "from": 0,
+            "to": 250000,
+            "base": 0,
+            "rate": 0
+          },
+          {
+            "from": 250001,
+            "to": 400000,
+            "base": 0,
+            "rate": 0.15
+          }
+        ]
+      },
+      "expectError": "contiguous"
+    },
+    {
+      "name": "engine skeleton refuses to look computed: blocked, zero totals (P0.6)",
+      "kind": "engineSkeleton",
+      "input": {},
+      "expect": {
+        "blocked": "ENGINE_SKELETON",
+        "gross": 0,
+        "net": 0,
+        "lines": 0
+      }
+    }
+  ]
+}
