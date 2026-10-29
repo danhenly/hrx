@@ -76,6 +76,8 @@ export type ComputePayslipArgs = {
     employee: { id: string; name: string };
     profile: PayProfile;
     days: DayRecord[];
+    /** Manila-midnight dates covered by approved PAID leave (P8.4). */
+    leave?: { paidDates: number[] };
     holidayTable: HolidayRule[];
     tables: {
         deminimis?: DeminimisTable;
@@ -199,6 +201,9 @@ export function computePayslip(args: ComputePayslipArgs): PayResult {
     const recordByDate = new Map(
         args.days.map((day) => [dateKeyOf(day.date), day]),
     );
+    // P8.4: approved PAID leave is a worked day — not an absence. Unpaid leave is not
+    // listed at all, so it stays an absence and the D18 deduction applies unchanged.
+    const paidLeaveDates = new Set((args.leave?.paidDates ?? []).map((date) => dateKeyOf(date)));
     const workedDates = new Set(
         args.days.filter((day) => day.totalMinutes > 0).map((day) => dateKeyOf(day.date)),
     );
@@ -216,10 +221,15 @@ export function computePayslip(args: ComputePayslipArgs): PayResult {
             continue;
         }
         const record = recordByDate.get(dateKeyOf(date));
+        const onPaidLeave = paidLeaveDates.has(dateKeyOf(date));
+        // A paid leave day is priced as the standard 09:00–17:00 shift: full basic pay,
+        // no night differential (there are no intervals to differential against).
         const priced = priceDay({
             date,
-            totalMinutes: record?.totalMinutes ?? 0,
-            intervals: record?.intervals ?? [],
+            totalMinutes: onPaidLeave ? NORMAL_MINUTES_PER_DAY : (record?.totalMinutes ?? 0),
+            intervals: onPaidLeave
+                ? [{ start: date + 9 * 3_600_000, end: date + 17 * 3_600_000 }]
+                : (record?.intervals ?? []),
             classification: {
                 dayType: classifyDay(date, args.holidayTable),
                 isRestDay: isRestDay(date, profile.workWeek),
@@ -229,6 +239,7 @@ export function computePayslip(args: ComputePayslipArgs): PayResult {
             // worked the day before.
             priorDayWorked: workedDates.has(dateKeyOf(date - DAY_MS)),
         });
+        if (onPaidLeave) workedDates.add(dateKeyOf(date));
         if (priced.lines.length > 0) pricedDayCount += 1;
         lines.push(...priced.lines);
         workedMinutes += priced.workedMinutes;
@@ -242,10 +253,10 @@ export function computePayslip(args: ComputePayslipArgs): PayResult {
         if (profile.payType === "monthly" && !isRestDay(date, profile.workWeek)) {
             const dayType = classifyDay(date, args.holidayTable);
             if (dayType === "ordinary" || dayType === "special_working") {
-                const shortfall = NORMAL_MINUTES_PER_DAY - Math.min(
-                    record?.totalMinutes ?? 0,
-                    NORMAL_MINUTES_PER_DAY,
-                );
+                const workedThisDay = onPaidLeave
+                    ? NORMAL_MINUTES_PER_DAY
+                    : Math.min(record?.totalMinutes ?? 0, NORMAL_MINUTES_PER_DAY);
+                const shortfall = NORMAL_MINUTES_PER_DAY - workedThisDay;
                 if (shortfall > 0) {
                     absentMinutes += shortfall;
                 }

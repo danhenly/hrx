@@ -1,5 +1,5 @@
 import type { Doc, Id } from "../_generated/dataModel";
-import { PH_OFFSET_MS } from "../lib/payroll/calendar";
+import { PH_OFFSET_MS, isRestDay } from "../lib/payroll/calendar";
 import type { QueryCtx } from "../_generated/server";
 import { ConvexError } from "convex/values";
 import { computePayslip } from "../lib/payroll/engine";
@@ -20,6 +20,7 @@ import type {
     PayResult,
 } from "../lib/payroll/types";
 import type { LoanState } from "../lib/payroll/loans";
+import { leaveBalance, roundDays } from "../lib/payroll/leave";
 
 /**
  * The ONE place an employee's payroll inputs are assembled.
@@ -132,6 +133,8 @@ export type EmployeeContext = {
     loans: LoanState[];
     /** 13th month ledger for the employee's calendar year (D5). */
     thirteenth: { accruedPesos: number; paidPesos: number; exemptUsedPesos: number };
+    /** Manila-midnight dates covered by approved PAID leave (P8.4). */
+    paidLeaveDates: number[];
     /** Set when this period is the employee's final one (P5.3). */
     separation?: { lastDay: number; reason: string; silDaysUnpaid: number; yearsOfService: number };
 };
@@ -278,9 +281,62 @@ export async function loadEmployeeContext(
           )
         : 0;
 
+    // P8.4: approved paid leave. Unpaid leave is deliberately NOT collected — it must
+    // stay an absence so the D18 deduction applies.
+    const leaveTypes = await ctx.db
+        .query("leaveTypes")
+        .withIndex("by_org", (q) => q.eq("orgId", orgId))
+        .collect();
+    const paidTypeIds = new Set(
+        leaveTypes.filter((type) => type.paid).map((type) => String(type._id)),
+    );
+    const convertibleCodes = new Set(
+        leaveTypes.filter((type) => type.convertibleOnSeparation).map((type) => type.code),
+    );
+
+    const DAY_MS = 24 * 60 * 60 * 1000;
+    const approvedLeave = (
+        await ctx.db
+            .query("leaveRequests")
+            .withIndex("by_org_employee", (q) => q.eq("orgId", orgId).eq("employeeId", employeeId))
+            .collect()
+    ).filter((request) => request.status === "approved");
+
+    const paidLeaveDates: number[] = [];
+    for (const request of approvedLeave) {
+        if (!paidTypeIds.has(String(request.leaveTypeId))) continue;
+        const from = Math.max(request.startDate, period.startDate);
+        const to = Math.min(request.endDate, period.endDate);
+        for (let date = from; date <= to; date += DAY_MS) {
+            if (!isRestDay(date, resolved.terms.workWeek)) paidLeaveDates.push(date);
+        }
+    }
+
+    // P8.5: the SIL balance is now a LEDGER FACT, not "5 days per year of service".
+    const leaveRows = (
+        await ctx.db
+            .query("leaveLedger")
+            .withIndex("by_org", (q) => q.eq("orgId", orgId))
+            .collect()
+    ).filter(
+        (row) => row.employeeId === employeeId && convertibleCodes.has(row.leaveCode),
+    );
+    const convertibleBalanceDays = roundDays(
+        leaveRows.reduce(
+            (total, row) =>
+                leaveBalance({
+                    accruedDays: row.accruedDays,
+                    usedDays: row.usedDays,
+                    adjustedDays: row.adjustedDays,
+                }) + total,
+            0,
+        ),
+    );
+
     return {
         employee,
         positionRow,
+        paidLeaveDates,
         terms: resolved.terms,
         issues: [],
         loans,
@@ -293,7 +349,9 @@ export async function loadEmployeeContext(
             ? {
                   lastDay: positionRow.endDate!,
                   reason: "separation",
-                  silDaysUnpaid: 5 * Math.max(0, yearsOfService),
+                  // The ledger's convertible balance. Zero is a real answer: an employee
+                  // who used every SIL day gets no conversion.
+                  silDaysUnpaid: Math.max(0, convertibleBalanceDays),
                   yearsOfService,
               }
             : undefined,
@@ -330,6 +388,7 @@ export function computeFromContext(args: {
             positionRowId: args.context.positionRow._id,
         },
         days: args.context.days,
+        leave: { paidDates: args.context.paidLeaveDates },
         holidayTable: args.tables.holidays,
         tables: {
             sss: args.tables.sss,

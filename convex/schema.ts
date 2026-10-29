@@ -497,6 +497,37 @@ export default defineSchema({
         .index("by_org", ["orgId"]),
 
     /**
+     * Leave requests (P8.3). Usage hits the ledger on APPROVAL, never on request, so a
+     * pending request can never quietly reduce a balance.
+     */
+    leaveRequests: defineTable({
+        orgId: v.id("organizations"),
+        employeeId: v.id("employees"),
+        leaveTypeId: v.id("leaveTypes"),
+        leaveCode: v.string(),
+        /** Manila-midnight anchors, inclusive. */
+        startDate: v.number(),
+        endDate: v.number(),
+        /** Working days covered, excluding rest days. */
+        days: v.number(),
+        reason: v.optional(v.string()),
+        status: v.union(
+            v.literal("pending"),
+            v.literal("approved"),
+            v.literal("rejected"),
+            v.literal("cancelled"),
+        ),
+        decidedBy: v.optional(v.id("users")),
+        decidedAt: v.optional(v.number()),
+        rejectReason: v.optional(v.string()),
+        createdBy: v.id("users"),
+        createdAt: v.number(),
+    })
+        .index("by_org_employee", ["orgId", "employeeId"])
+        .index("by_org_status", ["orgId", "status"])
+        .index("by_org", ["orgId"]),
+
+    /**
      * Leave ledger (P8.2) — one row per employee, leave type and payroll period. Written
      * by the payroll run that accrued it, so a balance can never disagree with the
      * register that produced it.
