@@ -28,12 +28,33 @@ const libDir = join(root, "convex", "lib", "payroll");
 const fixturesDir = join(libDir, "__fixtures__");
 
 const load = (file) => import(pathToFileURL(join(libDir, file)).href);
-const [rates, calendar, tax, engine] = await Promise.all([
+const [rates, calendar, tax, engine, premiums] = await Promise.all([
     load("rates.ts"),
     load("calendar.ts"),
     load("tax.ts"),
     load("engine.ts"),
+    load("premiums.ts"),
 ]);
+
+/** The holiday set the engine fixtures price against (a slice of DOLE LA 12-25). */
+const FIXTURE_HOLIDAYS = [
+    { date: "2026-01-01", name: "New Year's Day", type: "regular" },
+    { date: "2026-02-25", name: "EDSA People Power Revolution Anniversary", type: "special_working" },
+    { date: "2026-08-31", name: "National Heroes Day", type: "regular" },
+    { date: "2026-11-01", name: "All Saints' Day", type: "special_non_working" },
+    { date: "2026-11-02", name: "All Souls' Day", type: "special_non_working" },
+    { date: "2026-11-30", name: "Bonifacio Day", type: "regular" },
+    { date: "2026-12-25", name: "Christmas Day", type: "regular" },
+];
+
+const HOUR_MS = 3_600_000;
+const intervalsOn = (anchor, spans) =>
+    (spans ?? []).map(([from, to]) => ({
+        start: anchor + from * HOUR_MS,
+        end: anchor + to * HOUR_MS,
+    }));
+const minutesOf = (intervals) =>
+    intervals.reduce((sum, interval) => sum + (interval.end - interval.start) / 60_000, 0);
 
 const EPSILON = 1e-6;
 
@@ -144,6 +165,87 @@ const handlers = {
         };
     },
 
+    priceDay({ terms, date, intervals, dayType, isRestDay, priorDayWorked }) {
+        const anchor = calendar.msOfDateKey(date);
+        const spans = intervalsOn(anchor, intervals);
+        const priced = premiums.priceDay({
+            date: anchor,
+            totalMinutes: minutesOf(spans),
+            intervals: spans,
+            classification: { dayType, isRestDay },
+            terms,
+            priorDayWorked: priorDayWorked === true,
+        });
+        const pairs = priced.lines
+            .map((line) => [line.code, line.amount])
+            .sort((a, b) => (a[0] < b[0] ? -1 : 1));
+        return {
+            codes: pairs.map((pair) => pair[0]),
+            amounts: pairs.map((pair) => pair[1]),
+            workedMinutes: priced.workedMinutes,
+            otMinutes: priced.otMinutes,
+            nightMinutes: priced.nightMinutes,
+        };
+    },
+
+    nightMinutes({ date, intervals }) {
+        const anchor = calendar.msOfDateKey(date);
+        return { minutes: premiums.nightMinutes(intervalsOn(anchor, intervals)) };
+    },
+
+    computePayslip({ terms, period, entries, deminimis, employmentStart, employmentEnd }) {
+        const startDate = calendar.msOfDateKey(period.start);
+        const endDate = calendar.msOfDateKey(period.end);
+        const days = (entries ?? []).map((entry) => {
+            const anchor = calendar.msOfDateKey(entry.date);
+            const spans = intervalsOn(anchor, entry.intervals);
+            return {
+                entryId: `fixture-${entry.date}`,
+                date: anchor,
+                totalMinutes: minutesOf(spans),
+                intervals: spans,
+                status: "approved",
+            };
+        });
+        const result = engine.computePayslip({
+            employee: { id: "fixture", name: "Fixture" },
+            profile: terms,
+            days,
+            holidayTable: FIXTURE_HOLIDAYS,
+            tables: { deminimis },
+            adjustments: [],
+            period: { startDate, endDate, payDate: endDate, isYearEnd: false },
+            employment: {
+                start: employmentStart ? calendar.msOfDateKey(employmentStart) : undefined,
+                end: employmentEnd ? calendar.msOfDateKey(employmentEnd) : undefined,
+            },
+        });
+        // Only EARNING codes: memo lines (rate derivation, statutory basis) are
+        // documentation, not money, and asserting on them hides a missing earning.
+        const codes = [
+            ...new Set(
+                result.lines.filter((line) => line.kind === "earning").map((line) => line.code),
+            ),
+        ].sort();
+        const deductionCodes = [
+            ...new Set(
+                result.lines
+                    .filter((line) => line.kind === "deduction")
+                    .map((line) => line.code),
+            ),
+        ].sort();
+        return {
+            codes,
+            deductionCodes,
+            gross: result.gross,
+            totalDeductions: result.totalDeductions,
+            net: result.net,
+            absentDays: Number((result.absentDays ?? 0).toFixed(4)),
+            blocked: result.blocked?.code ?? null,
+            lines: result.lines.length,
+        };
+    },
+
     engineSkeleton() {
         const result = engine.computePayslip({});
         return {
@@ -208,7 +310,7 @@ function runCase(file, fixture, testCase) {
     console.log(`  ok   ${testCase.name}`);
 }
 
-for (const file of ["rates.json", "calendar.json"]) {
+for (const file of ["rates.json", "calendar.json", "premiums.json"]) {
     const fixture = JSON.parse(readFileSync(join(fixturesDir, file), "utf8"));
     console.log(`\n${file} — ${fixture.description}`);
     for (const testCase of fixture.cases) runCase(file, fixture, testCase);

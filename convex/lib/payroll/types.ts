@@ -25,13 +25,49 @@ export type DayType =
     | "special_working"
     | "ordinary";
 
-/** One allowance on a position row (D15). `amount` is pesos, per the type's unit. */
+/** How often an allowance's amount is paid (from the `allowanceTypes` catalogue). */
+export type AllowanceUnit =
+    | "monthly"
+    | "semi_monthly"
+    | "annual"
+    | "per_day"
+    | "per_period";
+
+/** One allowance on a position row (D15). `amount` is pesos, per `unit`. */
 export type Allowance = {
     code: string;
     description: string;
     amount: number;
     taxable: boolean;
     deMinimisCategory?: string;
+    /** Resolved from `allowanceTypes` by the caller; defaults to "monthly". */
+    unit?: AllowanceUnit;
+};
+
+/** One ceiling row from `statutoryTables(kind: "deminimis")`. */
+export type DeminimisCeiling = {
+    key: string;
+    label: string;
+    unit: string;
+    /** Pesos (or days); null where the regulation states a percentage instead. */
+    ceiling: number | null;
+    period: string;
+    monthlyEquivalent?: number;
+    percentOfMinWage?: number;
+};
+
+export type DeminimisTable = {
+    effectiveNote?: string;
+    ceilings: DeminimisCeiling[];
+};
+
+/** A correction applied to a period, booked as a line (D2: never an edit). */
+export type Adjustment = {
+    code: string;
+    description: string;
+    /** Positive = earning, negative = deduction. */
+    amountCentavos: Money;
+    reason: string;
 };
 
 /** Pay terms resolved for a period — always complete, never partial (D15). */
@@ -90,6 +126,16 @@ export type PayResult = {
     totalDeductions: Money;
     net: Money;
     employerCost: Money;
+    /** Hours actually worked in the period, from the frozen day records. */
+    hoursWorked?: number;
+    /** Hours inside the 22:00–06:00 window. */
+    nightHours?: number;
+    /** Calendar days that produced at least one line. */
+    pricedDays?: number;
+    /** Days deducted as unpaid absence or undertime (monthly-paid). */
+    absentDays?: number;
+    /** Anything the reviewer must know that is not a line (unevaluated ceilings…). */
+    notes?: string[];
     blocked?: { code: string; reason: string };
 };
 

@@ -329,6 +329,22 @@ export default defineSchema({
         status: v.union(v.literal("open"), v.literal("closed")),
     }).index("by_org_start", ["orgId", "startDate"]),
 
+    /**
+     * Adjustments (D2) — a correction is a LINE applied to a period, never an edit
+     * to a computed register. Created in P3 with the run; P1 only reads them.
+     */
+    adjustments: defineTable({
+        orgId: v.id("organizations"),
+        employeeId: v.id("employees"),
+        targetPeriodId: v.id("payrollPeriods"),
+        code: v.string(),
+        /** Pesos. Positive = earning, negative = deduction. */
+        amount: v.number(),
+        reason: v.string(),
+        createdBy: v.id("users"),
+        appliedRunId: v.optional(v.id("payrollRuns")),
+    }).index("by_org_target", ["orgId", "targetPeriodId"]),
+
     // ─── Audit ──────────────────────────────────────────────────────────────
 
     /**
