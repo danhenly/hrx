@@ -450,6 +450,7 @@ export default defineSchema({
             v.literal("bank_file"),
             v.literal("run_pack"),
             v.literal("register_csv"),
+            v.literal("gov_schedule"),
         ),
         /** Layout id for a bank file (bdo, generic); "" for the others. */
         layout: v.string(),
@@ -460,6 +461,8 @@ export default defineSchema({
         total: v.number(),
         createdBy: v.id("users"),
         createdAt: v.number(),
+        /** Statutory table version this artefact was produced from (D17). */
+        tableVersion: v.optional(v.string()),
     })
         .index("by_run", ["runId"])
         .index("by_org", ["orgId"]),

@@ -1,0 +1,697 @@
+{
+  "description": "P6 government schedules: totals restate the register, every form carries its table version",
+  "cases": [
+    {
+      "name": "R-3 totals equal the SSS lines, and a member with no contribution is dropped",
+      "kind": "govForm",
+      "input": {
+        "form": "r3",
+        "rows": [
+          {
+            "employeeId": "e1",
+            "name": "Reyes, Ana",
+            "reference": "34-1234567-8",
+            "employeeCentavos": 42500,
+            "employerCentavos": 85000,
+            "extraCentavos": 1000,
+            "loanCentavos": 150000
+          },
+          {
+            "employeeId": "e2",
+            "name": "Aquino, Ben",
+            "reference": "34-7654321-0",
+            "employeeCentavos": 50000,
+            "employerCentavos": 100000,
+            "extraCentavos": 1000,
+            "loanCentavos": 0
+          },
+          {
+            "employeeId": "e3",
+            "name": "Cruz, Cita",
+            "reference": "",
+            "employeeCentavos": 0,
+            "employerCentavos": 0,
+            "extraCentavos": 0,
+            "loanCentavos": 0
+          }
+        ],
+        "tableVersion": "sss@2026-01-01"
+      },
+      "expect": {
+        "rows": 2,
+        "employee": 92500,
+        "employer": 185000,
+        "extra": 2000,
+        "loan": 150000,
+        "versionStamped": true,
+        "filename": "sss_r3-2026-11-16-to-2026-11-30-run1-v1.csv",
+        "csvQuotedComma": true
+      }
+    },
+    {
+      "name": "R-3 omits the MSC column when the register has no salary credit",
+      "kind": "govForm",
+      "input": {
+        "form": "r3",
+        "rows": [
+          {
+            "employeeId": "e1",
+            "name": "Reyes, Ana",
+            "reference": "34-1234567-8",
+            "employeeCentavos": 42500,
+            "employerCentavos": 85000,
+            "extraCentavos": 1000,
+            "loanCentavos": 150000
+          },
+          {
+            "employeeId": "e2",
+            "name": "Aquino, Ben",
+            "reference": "34-7654321-0",
+            "employeeCentavos": 50000,
+            "employerCentavos": 100000,
+            "extraCentavos": 1000,
+            "loanCentavos": 0
+          },
+          {
+            "employeeId": "e3",
+            "name": "Cruz, Cita",
+            "reference": "",
+            "employeeCentavos": 0,
+            "employerCentavos": 0,
+            "extraCentavos": 0,
+            "loanCentavos": 0
+          }
+        ]
+      },
+      "expect": {
+        "columns": "No. | SSS Number | Member Name | EE SS | ER SS | EC | SSS Loan | Total"
+      }
+    },
+    {
+      "name": "R-3 shows the MSC column when the caller supplies it",
+      "kind": "govForm",
+      "input": {
+        "form": "r3",
+        "rows": [
+          {
+            "employeeId": "e1",
+            "name": "Reyes, Ana",
+            "reference": "34-1234567-8",
+            "employeeCentavos": 42500,
+            "employerCentavos": 85000,
+            "extraCentavos": 1000,
+            "loanCentavos": 150000
+          },
+          {
+            "employeeId": "e2",
+            "name": "Aquino, Ben",
+            "reference": "34-7654321-0",
+            "employeeCentavos": 50000,
+            "employerCentavos": 100000,
+            "extraCentavos": 1000,
+            "loanCentavos": 0
+          },
+          {
+            "employeeId": "e3",
+            "name": "Cruz, Cita",
+            "reference": "",
+            "employeeCentavos": 0,
+            "employerCentavos": 0,
+            "extraCentavos": 0,
+            "loanCentavos": 0
+          }
+        ],
+        "mscByEmployee": {
+          "e1": 20000,
+          "e2": 30000
+        }
+      },
+      "expect": {
+        "columns": "No. | SSS Number | Member Name | MSC | EE SS | ER SS | EC | SSS Loan | Total"
+      }
+    },
+    {
+      "name": "RF-1 total premium is the EE and ER shares added",
+      "kind": "govForm",
+      "input": {
+        "form": "rf1",
+        "rows": [
+          {
+            "employeeId": "e1",
+            "name": "Reyes, Ana",
+            "reference": "34-1234567-8",
+            "employeeCentavos": 42500,
+            "employerCentavos": 85000,
+            "extraCentavos": 1000,
+            "loanCentavos": 150000
+          },
+          {
+            "employeeId": "e2",
+            "name": "Aquino, Ben",
+            "reference": "34-7654321-0",
+            "employeeCentavos": 50000,
+            "employerCentavos": 100000,
+            "extraCentavos": 1000,
+            "loanCentavos": 0
+          },
+          {
+            "employeeId": "e3",
+            "name": "Cruz, Cita",
+            "reference": "",
+            "employeeCentavos": 0,
+            "employerCentavos": 0,
+            "extraCentavos": 0,
+            "loanCentavos": 0
+          }
+        ]
+      },
+      "expect": {
+        "rows": 2,
+        "employee": 92500,
+        "employer": 185000,
+        "extra": 0
+      }
+    },
+    {
+      "name": "MCRF fund salary column appears only when supplied",
+      "kind": "govForm",
+      "input": {
+        "form": "mcrf",
+        "rows": [
+          {
+            "employeeId": "e1",
+            "name": "Reyes, Ana",
+            "reference": "34-1234567-8",
+            "employeeCentavos": 42500,
+            "employerCentavos": 85000,
+            "extraCentavos": 1000,
+            "loanCentavos": 150000
+          },
+          {
+            "employeeId": "e2",
+            "name": "Aquino, Ben",
+            "reference": "34-7654321-0",
+            "employeeCentavos": 50000,
+            "employerCentavos": 100000,
+            "extraCentavos": 1000,
+            "loanCentavos": 0
+          },
+          {
+            "employeeId": "e3",
+            "name": "Cruz, Cita",
+            "reference": "",
+            "employeeCentavos": 0,
+            "employerCentavos": 0,
+            "extraCentavos": 0,
+            "loanCentavos": 0
+          }
+        ],
+        "fundSalaryByEmployee": {
+          "e1": 10000,
+          "e2": 5000
+        }
+      },
+      "expect": {
+        "columns": "No. | Pag-IBIG MID | Member Name | Fund Salary | EE Share | ER Share | Total"
+      }
+    },
+    {
+      "name": "1601-C: non-taxable is gross minus taxable, and tax is the withheld amount",
+      "kind": "govForm",
+      "input": {
+        "form": "1601c",
+        "tableVersion": "tax@2026-01-01",
+        "rows": [
+          {
+            "employeeId": "e1",
+            "name": "Reyes, Ana",
+            "reference": "123-456-789-000",
+            "employeeCentavos": 120000,
+            "employerCentavos": 0,
+            "grossCentavos": 3000000,
+            "taxableCentavos": 2500000
+          },
+          {
+            "employeeId": "e2",
+            "name": "Aquino, Ben",
+            "reference": "987-654-321-000",
+            "employeeCentavos": 0,
+            "employerCentavos": 0,
+            "grossCentavos": 1200000,
+            "taxableCentavos": 1200000
+          }
+        ]
+      },
+      "expect": {
+        "rows": 2,
+        "employee": 120000,
+        "gross": 4200000,
+        "taxable": 3700000,
+        "versionStamped": true,
+        "firstRow": "1 | 987-654-321-000 | Aquino, Ben | 12000.00 | 0.00 | 12000.00 | 0.00"
+      }
+    },
+    {
+      "name": "bucketing: a memo line never enters gross, and OT does",
+      "kind": "govBucket",
+      "input": {
+        "payslipIds": [
+          "p1"
+        ],
+        "lines": [
+          {
+            "payslipId": "p1",
+            "kind": "earning",
+            "code": "BASIC",
+            "amount": 10000,
+            "taxable": true
+          },
+          {
+            "payslipId": "p1",
+            "kind": "earning",
+            "code": "OT",
+            "amount": 1500,
+            "taxable": true
+          },
+          {
+            "payslipId": "p1",
+            "kind": "memo",
+            "code": "13M_ACCRUAL",
+            "amount": 958.33,
+            "taxable": false
+          },
+          {
+            "payslipId": "p1",
+            "kind": "deduction",
+            "code": "SSS",
+            "amount": 425,
+            "taxable": false
+          },
+          {
+            "payslipId": "p1",
+            "kind": "employer_cost",
+            "code": "SSS_ER",
+            "amount": 850,
+            "taxable": false
+          },
+          {
+            "payslipId": "p1",
+            "kind": "employer_cost",
+            "code": "EC",
+            "amount": 10,
+            "taxable": false
+          },
+          {
+            "payslipId": "p1",
+            "kind": "deduction",
+            "code": "SSS_LOAN",
+            "amount": 1500,
+            "taxable": false
+          },
+          {
+            "payslipId": "p1",
+            "kind": "deduction",
+            "code": "PHIC",
+            "amount": 210.29,
+            "taxable": false
+          },
+          {
+            "payslipId": "p1",
+            "kind": "employer_cost",
+            "code": "PHIC_ER",
+            "amount": 210.29,
+            "taxable": false
+          },
+          {
+            "payslipId": "p1",
+            "kind": "deduction",
+            "code": "HDMF",
+            "amount": 100,
+            "taxable": false
+          },
+          {
+            "payslipId": "p1",
+            "kind": "employer_cost",
+            "code": "HDMF_ER",
+            "amount": 200,
+            "taxable": false
+          },
+          {
+            "payslipId": "p1",
+            "kind": "deduction",
+            "code": "TAX",
+            "amount": 1200,
+            "taxable": false
+          },
+          {
+            "payslipId": "p2",
+            "kind": "earning",
+            "code": "BASIC",
+            "amount": 8000,
+            "taxable": true
+          },
+          {
+            "payslipId": "p2",
+            "kind": "deduction",
+            "code": "PAGIBIG_LOAN",
+            "amount": 500,
+            "taxable": false
+          },
+          {
+            "payslipId": "p2",
+            "kind": "deduction",
+            "code": "SSS",
+            "amount": 400,
+            "taxable": false
+          },
+          {
+            "payslipId": "p2",
+            "kind": "employer_cost",
+            "code": "SSS_ER",
+            "amount": 800,
+            "taxable": false
+          },
+          {
+            "payslipId": "p2",
+            "kind": "employer_cost",
+            "code": "EC",
+            "amount": 10,
+            "taxable": false
+          },
+          {
+            "payslipId": "p2",
+            "kind": "deduction",
+            "code": "TAX",
+            "amount": 0,
+            "taxable": false
+          }
+        ]
+      },
+      "expect": {
+        "gross": 1150000,
+        "taxable": 1150000,
+        "memoIgnored": 1150000
+      }
+    },
+    {
+      "name": "bucketing: only an SSS loan reaches the R-3 loan column",
+      "kind": "govBucket",
+      "input": {
+        "payslipIds": [
+          "p1",
+          "p2"
+        ],
+        "lines": [
+          {
+            "payslipId": "p1",
+            "kind": "earning",
+            "code": "BASIC",
+            "amount": 10000,
+            "taxable": true
+          },
+          {
+            "payslipId": "p1",
+            "kind": "earning",
+            "code": "OT",
+            "amount": 1500,
+            "taxable": true
+          },
+          {
+            "payslipId": "p1",
+            "kind": "memo",
+            "code": "13M_ACCRUAL",
+            "amount": 958.33,
+            "taxable": false
+          },
+          {
+            "payslipId": "p1",
+            "kind": "deduction",
+            "code": "SSS",
+            "amount": 425,
+            "taxable": false
+          },
+          {
+            "payslipId": "p1",
+            "kind": "employer_cost",
+            "code": "SSS_ER",
+            "amount": 850,
+            "taxable": false
+          },
+          {
+            "payslipId": "p1",
+            "kind": "employer_cost",
+            "code": "EC",
+            "amount": 10,
+            "taxable": false
+          },
+          {
+            "payslipId": "p1",
+            "kind": "deduction",
+            "code": "SSS_LOAN",
+            "amount": 1500,
+            "taxable": false
+          },
+          {
+            "payslipId": "p1",
+            "kind": "deduction",
+            "code": "PHIC",
+            "amount": 210.29,
+            "taxable": false
+          },
+          {
+            "payslipId": "p1",
+            "kind": "employer_cost",
+            "code": "PHIC_ER",
+            "amount": 210.29,
+            "taxable": false
+          },
+          {
+            "payslipId": "p1",
+            "kind": "deduction",
+            "code": "HDMF",
+            "amount": 100,
+            "taxable": false
+          },
+          {
+            "payslipId": "p1",
+            "kind": "employer_cost",
+            "code": "HDMF_ER",
+            "amount": 200,
+            "taxable": false
+          },
+          {
+            "payslipId": "p1",
+            "kind": "deduction",
+            "code": "TAX",
+            "amount": 1200,
+            "taxable": false
+          },
+          {
+            "payslipId": "p2",
+            "kind": "earning",
+            "code": "BASIC",
+            "amount": 8000,
+            "taxable": true
+          },
+          {
+            "payslipId": "p2",
+            "kind": "deduction",
+            "code": "PAGIBIG_LOAN",
+            "amount": 500,
+            "taxable": false
+          },
+          {
+            "payslipId": "p2",
+            "kind": "deduction",
+            "code": "SSS",
+            "amount": 400,
+            "taxable": false
+          },
+          {
+            "payslipId": "p2",
+            "kind": "employer_cost",
+            "code": "SSS_ER",
+            "amount": 800,
+            "taxable": false
+          },
+          {
+            "payslipId": "p2",
+            "kind": "employer_cost",
+            "code": "EC",
+            "amount": 10,
+            "taxable": false
+          },
+          {
+            "payslipId": "p2",
+            "kind": "deduction",
+            "code": "TAX",
+            "amount": 0,
+            "taxable": false
+          }
+        ]
+      },
+      "expect": {
+        "sssLoan": 150000,
+        "registerSssLoan": 150000
+      }
+    },
+    {
+      "name": "each schedule's totals equal the register's own lines",
+      "kind": "govBucket",
+      "input": {
+        "payslipIds": [
+          "p1",
+          "p2"
+        ],
+        "lines": [
+          {
+            "payslipId": "p1",
+            "kind": "earning",
+            "code": "BASIC",
+            "amount": 10000,
+            "taxable": true
+          },
+          {
+            "payslipId": "p1",
+            "kind": "earning",
+            "code": "OT",
+            "amount": 1500,
+            "taxable": true
+          },
+          {
+            "payslipId": "p1",
+            "kind": "memo",
+            "code": "13M_ACCRUAL",
+            "amount": 958.33,
+            "taxable": false
+          },
+          {
+            "payslipId": "p1",
+            "kind": "deduction",
+            "code": "SSS",
+            "amount": 425,
+            "taxable": false
+          },
+          {
+            "payslipId": "p1",
+            "kind": "employer_cost",
+            "code": "SSS_ER",
+            "amount": 850,
+            "taxable": false
+          },
+          {
+            "payslipId": "p1",
+            "kind": "employer_cost",
+            "code": "EC",
+            "amount": 10,
+            "taxable": false
+          },
+          {
+            "payslipId": "p1",
+            "kind": "deduction",
+            "code": "SSS_LOAN",
+            "amount": 1500,
+            "taxable": false
+          },
+          {
+            "payslipId": "p1",
+            "kind": "deduction",
+            "code": "PHIC",
+            "amount": 210.29,
+            "taxable": false
+          },
+          {
+            "payslipId": "p1",
+            "kind": "employer_cost",
+            "code": "PHIC_ER",
+            "amount": 210.29,
+            "taxable": false
+          },
+          {
+            "payslipId": "p1",
+            "kind": "deduction",
+            "code": "HDMF",
+            "amount": 100,
+            "taxable": false
+          },
+          {
+            "payslipId": "p1",
+            "kind": "employer_cost",
+            "code": "HDMF_ER",
+            "amount": 200,
+            "taxable": false
+          },
+          {
+            "payslipId": "p1",
+            "kind": "deduction",
+            "code": "TAX",
+            "amount": 1200,
+            "taxable": false
+          },
+          {
+            "payslipId": "p2",
+            "kind": "earning",
+            "code": "BASIC",
+            "amount": 8000,
+            "taxable": true
+          },
+          {
+            "payslipId": "p2",
+            "kind": "deduction",
+            "code": "PAGIBIG_LOAN",
+            "amount": 500,
+            "taxable": false
+          },
+          {
+            "payslipId": "p2",
+            "kind": "deduction",
+            "code": "SSS",
+            "amount": 400,
+            "taxable": false
+          },
+          {
+            "payslipId": "p2",
+            "kind": "employer_cost",
+            "code": "SSS_ER",
+            "amount": 800,
+            "taxable": false
+          },
+          {
+            "payslipId": "p2",
+            "kind": "employer_cost",
+            "code": "EC",
+            "amount": 10,
+            "taxable": false
+          },
+          {
+            "payslipId": "p2",
+            "kind": "deduction",
+            "code": "TAX",
+            "amount": 0,
+            "taxable": false
+          }
+        ]
+      },
+      "expect": {
+        "r3Employee": 82500,
+        "registerSss": 82500,
+        "r3Employer": 165000,
+        "registerSssEr": 165000,
+        "r3Extra": 2000,
+        "registerEc": 2000,
+        "r3Loan": 150000,
+        "registerSssLoan": 150000,
+        "rf1Premium": 42058,
+        "registerPhic": 21029,
+        "registerPhicEr": 21029,
+        "mcrfTotal": 30000,
+        "registerHdmf": 10000,
+        "registerHdmfEr": 20000,
+        "tax1601": 120000,
+        "registerTax": 120000,
+        "registerGross": 1950000,
+        "registerTaxable": 1950000
+      }
+    }
+  ]
+}

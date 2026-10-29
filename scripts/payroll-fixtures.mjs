@@ -36,7 +36,7 @@ const [bankFilesDoc, sha256Doc] = await Promise.all([
 const bankFiles = bankFilesDoc;
 const sha256 = sha256Doc;
 
-const [rates, calendar, tax, engine, premiums, statutory, thirteenth, loansLib] = await Promise.all([
+const [rates, calendar, tax, engine, premiums, statutory, thirteenth, govForms, loansLib] = await Promise.all([
     load("rates.ts"),
     load("calendar.ts"),
     load("tax.ts"),
@@ -44,6 +44,7 @@ const [rates, calendar, tax, engine, premiums, statutory, thirteenth, loansLib] 
     load("premiums.ts"),
     load("statutory.ts"),
     load("thirteenth.ts"),
+    load("govForms.ts"),
     load("loans.ts"),
 ]);
 
@@ -89,6 +90,103 @@ const ms = (dateKey) => calendar.msOfDateKey(dateKey);
 
 /** Each handler returns the object that the fixture's `expect` is matched against. */
 const handlers = {
+
+    govBucket(input) {
+        const ids = input.payslipIds;
+        const buckets = govForms.bucketLines(ids, input.lines);
+        const first = buckets[ids[0]];
+        // The four schedules built from the same buckets, so a fixture can prove the
+        // forms reconcile to the register's own lines rather than to each other.
+        const row = (id, ref, extra) => ({
+            employeeId: id,
+            name: `Employee ${id}`,
+            reference: ref,
+            employeeCentavos: buckets[id].sss,
+            employerCentavos: buckets[id].sssEr,
+            extraCentavos: buckets[id].ec,
+            loanCentavos: buckets[id].sssLoan,
+            ...extra,
+        });
+        const sssRows = ids.map((id) => row(id, "x", {}));
+        const r3 = govForms.buildR3({ rows: sssRows, tableVersion: "sss@2026-01-01", periodLabel: "p" });
+        const rf1 = govForms.buildRf1({
+            rows: ids.map((id) => ({ employeeId: id, name: `Employee ${id}`, reference: "",
+                employeeCentavos: buckets[id].phic, employerCentavos: buckets[id].phicEr })),
+            tableVersion: "ph@2026-01-01", periodLabel: "p",
+        });
+        const mcrf = govForms.buildMcrf({
+            rows: ids.map((id) => ({ employeeId: id, name: `Employee ${id}`, reference: "",
+                employeeCentavos: buckets[id].hdmf, employerCentavos: buckets[id].hdmfEr })),
+            tableVersion: "hdmf@2026-01-01", periodLabel: "p",
+        });
+        const c1601 = govForms.build1601C({
+            rows: ids.map((id) => ({ employeeId: id, name: `Employee ${id}`, reference: "",
+                employeeCentavos: buckets[id].tax, employerCentavos: 0,
+                grossCentavos: buckets[id].gross, taxableCentavos: buckets[id].taxable })),
+            tableVersion: "tax@2026-01-01", periodLabel: "p",
+        });
+        const sum = (pick) => ids.reduce((total, id) => total + pick(buckets[id]), 0);
+        return {
+            gross: first.gross,
+            taxable: first.taxable,
+            memoIgnored: first.gross,
+            sssLoan: first.sssLoan,
+            sssEr: first.sssEr,
+            ec: first.ec,
+            r3Employee: r3.totals.employeeCentavos,
+            r3Employer: r3.totals.employerCentavos,
+            r3Extra: r3.totals.extraCentavos,
+            r3Loan: r3.totals.loanCentavos,
+            rf1Premium: rf1.totals.employeeCentavos + rf1.totals.employerCentavos,
+            mcrfTotal: mcrf.totals.employeeCentavos + mcrf.totals.employerCentavos,
+            tax1601: c1601.totals.employeeCentavos,
+            registerGross: sum((b) => b.gross),
+            registerTaxable: sum((b) => b.taxable),
+            registerSss: sum((b) => b.sss),
+            registerSssEr: sum((b) => b.sssEr),
+            registerEc: sum((b) => b.ec),
+            registerSssLoan: sum((b) => b.sssLoan),
+            registerPhic: sum((b) => b.phic),
+            registerPhicEr: sum((b) => b.phicEr),
+            registerHdmf: sum((b) => b.hdmf),
+            registerHdmfEr: sum((b) => b.hdmfEr),
+            registerTax: sum((b) => b.tax),
+        };
+    },
+
+    govForm(input) {
+        const build = {
+            r3: govForms.buildR3,
+            rf1: govForms.buildRf1,
+            mcrf: govForms.buildMcrf,
+            "1601c": govForms.build1601C,
+        }[input.form];
+        if (!build) throw new Error(`unknown form ${input.form}`);
+        const args = {
+            rows: input.rows,
+            tableVersion: input.tableVersion ?? "sss@2026-01-01",
+            periodLabel: input.periodLabel ?? "2026-11-16 to 2026-11-30",
+        };
+        if (input.mscByEmployee) args.mscByEmployee = input.mscByEmployee;
+        if (input.fundSalaryByEmployee) args.fundSalaryByEmployee = input.fundSalaryByEmployee;
+        const form = build(args);
+        const csv = govForms.renderFormCsv(form);
+        return {
+            rows: form.rows.length,
+            employee: form.totals.employeeCentavos,
+            employer: form.totals.employerCentavos,
+            extra: form.totals.extraCentavos,
+            loan: form.totals.loanCentavos,
+            gross: form.totals.grossCentavos,
+            taxable: form.totals.taxableCentavos,
+            columns: form.columns.join(" | "),
+            versionStamped: csv.includes(form.tableVersion),
+            notes: form.notes.length,
+            filename: govForms.formFilename(form, "run1-v1"),
+            firstRow: form.rows[0]?.join(" | ") ?? "",
+            csvQuotedComma: csv.includes('"Reyes, Ana"'),
+        };
+    },
     dailyRate({ terms }) {
         const result = {
             dailyCentavos: rates.dailyRateCentavos(terms),
@@ -494,7 +592,7 @@ function runCase(file, fixture, testCase) {
     console.log(`  ok   ${testCase.name}`);
 }
 
-for (const file of ["rates.json", "calendar.json", "premiums.json", "statutory.json", "artefacts.json", "p5.json"]) {
+for (const file of ["rates.json", "calendar.json", "premiums.json", "statutory.json", "artefacts.json", "p5.json", "p6.json"]) {
     const fixture = JSON.parse(readFileSync(join(fixturesDir, file), "utf8"));
     console.log(`\n${file} — ${fixture.description}`);
     for (const testCase of fixture.cases) runCase(file, fixture, testCase);
