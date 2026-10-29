@@ -417,6 +417,32 @@ export const seedPayrollDataset = internalMutation({
                 endDate: spec.endDate ? msOfDateKey(spec.endDate) : undefined,
             });
 
+            // The §8.2 loan persona carries the two statutory loans the pilot named
+            // (D-PILOT-6): an SSS salary loan on the standard 10-month schedule and a
+            // Pag-IBIG MPL amortised over the same term.
+            if (spec.key === "loans") {
+                for (const loan of [
+                    { type: "sss" as const, principal: 30000, reference: "SSSL-2026-0001" },
+                    { type: "pagibig" as const, principal: 10000, reference: "MPL-2026-0007" },
+                ]) {
+                    await ctx.db.insert("loanAccounts", {
+                        orgId,
+                        employeeId,
+                        type: loan.type,
+                        principal: loan.principal,
+                        balance: loan.principal,
+                        // Standard 10-month schedule; per cutoff that is principal / 20.
+                        amortisation: Math.round((loan.principal / 10 / 2) * 100) / 100,
+                        termMonths: 10,
+                        reference: loan.reference,
+                        startPeriodId: periodIds[0],
+                        status: "active",
+                        createdBy: args.actorId,
+                        createdAt: now,
+                    });
+                }
+            }
+
             const ids = idNumbers(index, spec.omit);
             await ctx.db.insert("employeeStatutoryIds", {
                 orgId,
@@ -551,7 +577,7 @@ export const seedPayrollDataset = internalMutation({
             counts,
             personas: roster.slice(0, PERSONAS.length).map((member) => member.spec.key),
             notes: [
-                "Loan ledgers are NOT seeded: loanAccounts / loanAmortizations are P5 tables and do not exist in the schema yet. The 'loans' persona carries the pay terms those loans will amortise against.",
+                "The 'loans' persona carries two loans on the standard 10-month schedule (SSS salary loan ₱30,000, Pag-IBIG MPL ₱10,000) so a run books real amortisations.",
                 "The seeded users have no password (a mutation cannot hash one). Set one in Settings → Team to sign in as the hr preparer or admin approver.",
                 "Record this org in the vault note 'HRX Phase 2 — Test Data Registry' with its id, seed and row counts.",
             ],
@@ -671,6 +697,35 @@ export const teardownPayrollDataset = internalMutation({
         // P4's tables. Every stage that adds a table extends BOTH this and
         // verifyEmpty — a dataset that cannot be removed is as severe as a
         // miscalculation (§8.1c), and a verify that forgets a table reports success.
+        // P5's tables, in the same PR that adds them.
+        const loanAmortizations = await ctx.db
+            .query("loanAmortizations")
+            .withIndex("by_org", (q) => q.eq("orgId", orgId))
+            .collect();
+        counts.loanAmortizations = loanAmortizations.length;
+        await deleteAll(ctx, loanAmortizations.map((row) => row._id));
+
+        const loanAccounts = await ctx.db
+            .query("loanAccounts")
+            .withIndex("by_org_employee", (q) => q.eq("orgId", orgId))
+            .collect();
+        counts.loanAccounts = loanAccounts.length;
+        await deleteAll(ctx, loanAccounts.map((row) => row._id));
+
+        const thirteenthMonthLedger = await ctx.db
+            .query("thirteenthMonthLedger")
+            .withIndex("by_org_employee_year", (q) => q.eq("orgId", orgId))
+            .collect();
+        counts.thirteenthMonthLedger = thirteenthMonthLedger.length;
+        await deleteAll(ctx, thirteenthMonthLedger.map((row) => row._id));
+
+        const finalPayStatements = await ctx.db
+            .query("finalPayStatements")
+            .withIndex("by_org", (q) => q.eq("orgId", orgId))
+            .collect();
+        counts.finalPayStatements = finalPayStatements.length;
+        await deleteAll(ctx, finalPayStatements.map((row) => row._id));
+
         const payslipLinks = await ctx.db
             .query("payslipLinks")
             .withIndex("by_org", (q) => q.eq("orgId", orgId))
@@ -784,6 +839,22 @@ export const verifyEmpty = internalMutation({
             .query("payrollArtefacts")
             .withIndex("by_org", (q) => q.eq("orgId", orgId))
             .collect();
+        const loanAmortizations = await ctx.db
+            .query("loanAmortizations")
+            .withIndex("by_org", (q) => q.eq("orgId", orgId))
+            .collect();
+        const loanAccounts = await ctx.db
+            .query("loanAccounts")
+            .withIndex("by_org_employee", (q) => q.eq("orgId", orgId))
+            .collect();
+        const thirteenthMonthLedger = await ctx.db
+            .query("thirteenthMonthLedger")
+            .withIndex("by_org_employee_year", (q) => q.eq("orgId", orgId))
+            .collect();
+        const finalPayStatements = await ctx.db
+            .query("finalPayStatements")
+            .withIndex("by_org", (q) => q.eq("orgId", orgId))
+            .collect();
         const payrollPeriods = await ctx.db
             .query("payrollPeriods")
             .withIndex("by_org_start", (q) => q.eq("orgId", orgId))
@@ -812,6 +883,10 @@ export const verifyEmpty = internalMutation({
             payrollInputs: payrollInputs.length,
             payrollArtefacts: payrollArtefacts.length,
             payslipLinks: payslipLinks.length,
+            loanAccounts: loanAccounts.length,
+            loanAmortizations: loanAmortizations.length,
+            thirteenthMonthLedger: thirteenthMonthLedger.length,
+            finalPayStatements: finalPayStatements.length,
             auditLogs: auditLogs.length,
             members: members.length,
             organizations,

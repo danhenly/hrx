@@ -134,6 +134,17 @@ export type PayResult = {
     pricedDays?: number;
     /** Days deducted as unpaid absence or undertime (monthly-paid). */
     absentDays?: number;
+    /** 13th month accrued by this run (D5), centavos. */
+    thirteenthMonthAccrualCentavos?: number;
+    /** 13th month released by this run (December payout or separation), centavos. */
+    thirteenthMonthPayoutCentavos?: number;
+    /** Loan amortisations the run must persist and apply to balances (D9). */
+    loanPayments?: {
+        loanId: string;
+        type: string;
+        amountCentavos: Money;
+        balanceAfter: Money;
+    }[];
     /** Anything the reviewer must know that is not a line (unevaluated ceilings…). */
     notes?: string[];
     blocked?: { code: string; reason: string };

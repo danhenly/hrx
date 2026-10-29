@@ -1,0 +1,945 @@
+{
+  "description": "thirteenth.ts + loans.ts + the engine's P5 lines (accrual, payout split, loan priority/shortfall, final pay). Money in centavos.",
+  "cases": [
+    {
+      "name": "accrual for a full cutoff is 1/12 of the basic earned",
+      "kind": "accrual",
+      "input": {
+        "basicEarnedCentavos": 841188
+      },
+      "expect": {
+        "centavos": 70099
+      }
+    },
+    {
+      "name": "24 rounded cutoffs land exactly on 1/12 of the annual basic (round-half-up per period)",
+      "kind": "accrualYear",
+      "input": {
+        "perCutoffCentavos": 841188,
+        "cutoffs": 24
+      },
+      "expect": {
+        "totalCentavos": 1682376
+      }
+    },
+    {
+      "name": "per-period rounding stays within 12 centavos of the exact figure (the stated rule)",
+      "kind": "accrualYearBound",
+      "input": {
+        "perCutoffCentavos": 100,
+        "cutoffs": 24
+      },
+      "expect": {
+        "within12Cents": true
+      }
+    },
+    {
+      "name": "13th month inside the \u20b190,000 ceiling is fully exempt",
+      "kind": "payoutSplit",
+      "input": {
+        "accruedCentavos": 1682376,
+        "paidCentavos": 0,
+        "exemptUsedCentavos": 0,
+        "ceilingCentavos": 9000000
+      },
+      "expect": {
+        "totalCentavos": 1682376,
+        "exemptCentavos": 1682376,
+        "taxableCentavos": 0
+      }
+    },
+    {
+      "name": "an employee who already used \u20b180,000 of the ceiling has \u20b110,000 exempt and the rest TAXABLE",
+      "kind": "payoutSplit",
+      "input": {
+        "accruedCentavos": 5000000,
+        "paidCentavos": 0,
+        "exemptUsedCentavos": 8000000,
+        "ceilingCentavos": 9000000
+      },
+      "expect": {
+        "totalCentavos": 5000000,
+        "exemptCentavos": 1000000,
+        "taxableCentavos": 4000000
+      }
+    },
+    {
+      "name": "a payout releases only what is not already paid",
+      "kind": "payoutSplit",
+      "input": {
+        "accruedCentavos": 2000000,
+        "paidCentavos": 1500000,
+        "exemptUsedCentavos": 0,
+        "ceilingCentavos": 9000000
+      },
+      "expect": {
+        "totalCentavos": 500000,
+        "exemptCentavos": 500000
+      }
+    },
+    {
+      "name": "10 equal instalments of a \u20b130,000 SSS salary loan",
+      "kind": "instalments",
+      "input": {
+        "principalCentavos": 3000000,
+        "termMonths": 10
+      },
+      "expect": {
+        "first": 300000,
+        "count": 10,
+        "last": 300000,
+        "sum": 3000000
+      }
+    },
+    {
+      "name": "an odd principal puts the residue on the LAST instalment",
+      "kind": "instalments",
+      "input": {
+        "principalCentavos": 3000001,
+        "termMonths": 10
+      },
+      "expect": {
+        "first": 300000,
+        "count": 10,
+        "last": 300001,
+        "sum": 3000001
+      }
+    },
+    {
+      "name": "loans pay in priority order: SSS before Pag-IBIG before a company loan",
+      "kind": "planLoans",
+      "input": {
+        "availableCentavos": 500000,
+        "loans": [
+          {
+            "id": "c1",
+            "type": "company",
+            "balanceCentavos": 400000,
+            "amortisationCentavos": 100000
+          },
+          {
+            "id": "p1",
+            "type": "pagibig",
+            "balanceCentavos": 50000,
+            "amortisationCentavos": 50000
+          },
+          {
+            "id": "s1",
+            "type": "sss",
+            "balanceCentavos": 300000,
+            "amortisationCentavos": 150000
+          }
+        ]
+      },
+      "expect": {
+        "order": [
+          "s1",
+          "p1",
+          "c1"
+        ],
+        "paid": 300000,
+        "remaining": 200000
+      }
+    },
+    {
+      "name": "a schedule that would take net pay below zero BLOCKS the payslip (D9)",
+      "kind": "planLoans",
+      "input": {
+        "availableCentavos": 500000,
+        "loans": [
+          {
+            "id": "s1",
+            "type": "sss",
+            "balanceCentavos": 300000,
+            "amortisationCentavos": 150000
+          },
+          {
+            "id": "c1",
+            "type": "company",
+            "balanceCentavos": 400000,
+            "amortisationCentavos": 400000
+          }
+        ]
+      },
+      "expect": {
+        "blocked": "LOAN_SHORTFALL"
+      }
+    },
+    {
+      "name": "a loan never amortises more than its remaining balance",
+      "kind": "planLoans",
+      "input": {
+        "availableCentavos": 500000,
+        "loans": [
+          {
+            "id": "s1",
+            "type": "sss",
+            "balanceCentavos": 20000,
+            "amortisationCentavos": 150000
+          }
+        ]
+      },
+      "expect": {
+        "paid": 20000
+      }
+    },
+    {
+      "name": "engine: the accrual is a memo line every run, and does not move money",
+      "kind": "computePayslip",
+      "input": {
+        "terms": {
+          "payType": "monthly",
+          "basicRate": 16823.75,
+          "dailyRateBasis": "313",
+          "workWeek": "6_day",
+          "statutoryBasis": "basic",
+          "allowances": []
+        },
+        "period": {
+          "start": "2026-11-16",
+          "end": "2026-11-16"
+        },
+        "entries": [
+          {
+            "date": "2026-11-16",
+            "intervals": [
+              [
+                8,
+                12
+              ],
+              [
+                13,
+                17
+              ]
+            ]
+          }
+        ],
+        "tables": {
+          "sss": {
+            "totalRate": 0.15,
+            "employeeRate": 0.05,
+            "employerRate": 0.1,
+            "mscMin": 5000,
+            "mscMax": 35000,
+            "mscStep": 500,
+            "ec": {
+              "low": 10,
+              "high": 30,
+              "lowMaxMsc": 14500
+            },
+            "mpf": {
+              "mscThreshold": 20000,
+              "employeeRate": 0.05,
+              "employerRate": 0.1
+            }
+          },
+          "philhealth": {
+            "rate": 0.05,
+            "employeeShare": 0.025,
+            "employerShare": 0.025,
+            "floor": 10000,
+            "ceiling": 100000
+          },
+          "pagibig": {
+            "employeeRate": 0.02,
+            "employerRate": 0.02,
+            "employeeRateLow": 0.01,
+            "lowCompensationThreshold": 1500,
+            "maxFundSalary": 10000
+          },
+          "tax": {
+            "annualBrackets": [
+              {
+                "from": 0,
+                "to": 250000,
+                "base": 0,
+                "rate": 0
+              },
+              {
+                "from": 250000,
+                "to": 400000,
+                "base": 0,
+                "rate": 0.15
+              },
+              {
+                "from": 400000,
+                "to": 800000,
+                "base": 22500,
+                "rate": 0.2
+              },
+              {
+                "from": 800000,
+                "to": 2000000,
+                "base": 102500,
+                "rate": 0.25
+              },
+              {
+                "from": 2000000,
+                "to": 8000000,
+                "base": 402500,
+                "rate": 0.3
+              },
+              {
+                "from": 8000000,
+                "to": null,
+                "base": 2202500,
+                "rate": 0.35
+              }
+            ],
+            "thirteenthMonthExemptCeiling": 90000
+          }
+        },
+        "thirteenthMonth": {
+          "accruedCentavos": 0,
+          "paidCentavos": 0,
+          "exemptUsedCentavos": 0,
+          "ceilingCentavos": 9000000,
+          "isPayoutRun": false
+        }
+      },
+      "expect": {
+        "codes": [
+          "BASIC"
+        ],
+        "memoCodes": [
+          "13M_ACCRUAL",
+          "RATE_DERIVATION",
+          "STATUTORY_BASIS"
+        ],
+        "thirteenthAccrual": 70099,
+        "gross": 841188
+      }
+    },
+    {
+      "name": "engine: loans are deducted after tax, in priority order",
+      "kind": "computePayslip",
+      "input": {
+        "terms": {
+          "payType": "monthly",
+          "basicRate": 16823.75,
+          "dailyRateBasis": "313",
+          "workWeek": "6_day",
+          "statutoryBasis": "basic",
+          "allowances": []
+        },
+        "period": {
+          "start": "2026-11-16",
+          "end": "2026-11-16"
+        },
+        "entries": [
+          {
+            "date": "2026-11-16",
+            "intervals": [
+              [
+                8,
+                12
+              ],
+              [
+                13,
+                17
+              ]
+            ]
+          }
+        ],
+        "tables": {
+          "sss": {
+            "totalRate": 0.15,
+            "employeeRate": 0.05,
+            "employerRate": 0.1,
+            "mscMin": 5000,
+            "mscMax": 35000,
+            "mscStep": 500,
+            "ec": {
+              "low": 10,
+              "high": 30,
+              "lowMaxMsc": 14500
+            },
+            "mpf": {
+              "mscThreshold": 20000,
+              "employeeRate": 0.05,
+              "employerRate": 0.1
+            }
+          },
+          "philhealth": {
+            "rate": 0.05,
+            "employeeShare": 0.025,
+            "employerShare": 0.025,
+            "floor": 10000,
+            "ceiling": 100000
+          },
+          "pagibig": {
+            "employeeRate": 0.02,
+            "employerRate": 0.02,
+            "employeeRateLow": 0.01,
+            "lowCompensationThreshold": 1500,
+            "maxFundSalary": 10000
+          },
+          "tax": {
+            "annualBrackets": [
+              {
+                "from": 0,
+                "to": 250000,
+                "base": 0,
+                "rate": 0
+              },
+              {
+                "from": 250000,
+                "to": 400000,
+                "base": 0,
+                "rate": 0.15
+              },
+              {
+                "from": 400000,
+                "to": 800000,
+                "base": 22500,
+                "rate": 0.2
+              },
+              {
+                "from": 800000,
+                "to": 2000000,
+                "base": 102500,
+                "rate": 0.25
+              },
+              {
+                "from": 2000000,
+                "to": 8000000,
+                "base": 402500,
+                "rate": 0.3
+              },
+              {
+                "from": 8000000,
+                "to": null,
+                "base": 2202500,
+                "rate": 0.35
+              }
+            ],
+            "thirteenthMonthExemptCeiling": 90000
+          }
+        },
+        "loans": [
+          {
+            "id": "s1",
+            "type": "sss",
+            "balanceCentavos": 300000,
+            "amortisationCentavos": 150000
+          },
+          {
+            "id": "p1",
+            "type": "pagibig",
+            "balanceCentavos": 50000,
+            "amortisationCentavos": 50000
+          }
+        ]
+      },
+      "expect": {
+        "deductionCodes": [
+          "HDMF",
+          "PAGIBIG_LOAN",
+          "PHIC",
+          "SSS",
+          "SSS_LOAN"
+        ],
+        "loanPayments": 2,
+        "totalDeductions": 273529,
+        "net": 567659
+      }
+    },
+    {
+      "name": "engine: a loan that does not fit blocks the payslip instead of trimming the payment",
+      "kind": "computePayslip",
+      "input": {
+        "terms": {
+          "payType": "monthly",
+          "basicRate": 16823.75,
+          "dailyRateBasis": "313",
+          "workWeek": "6_day",
+          "statutoryBasis": "basic",
+          "allowances": []
+        },
+        "period": {
+          "start": "2026-11-16",
+          "end": "2026-11-16"
+        },
+        "entries": [
+          {
+            "date": "2026-11-16",
+            "intervals": [
+              [
+                8,
+                12
+              ],
+              [
+                13,
+                17
+              ]
+            ]
+          }
+        ],
+        "tables": {
+          "sss": {
+            "totalRate": 0.15,
+            "employeeRate": 0.05,
+            "employerRate": 0.1,
+            "mscMin": 5000,
+            "mscMax": 35000,
+            "mscStep": 500,
+            "ec": {
+              "low": 10,
+              "high": 30,
+              "lowMaxMsc": 14500
+            },
+            "mpf": {
+              "mscThreshold": 20000,
+              "employeeRate": 0.05,
+              "employerRate": 0.1
+            }
+          },
+          "philhealth": {
+            "rate": 0.05,
+            "employeeShare": 0.025,
+            "employerShare": 0.025,
+            "floor": 10000,
+            "ceiling": 100000
+          },
+          "pagibig": {
+            "employeeRate": 0.02,
+            "employerRate": 0.02,
+            "employeeRateLow": 0.01,
+            "lowCompensationThreshold": 1500,
+            "maxFundSalary": 10000
+          },
+          "tax": {
+            "annualBrackets": [
+              {
+                "from": 0,
+                "to": 250000,
+                "base": 0,
+                "rate": 0
+              },
+              {
+                "from": 250000,
+                "to": 400000,
+                "base": 0,
+                "rate": 0.15
+              },
+              {
+                "from": 400000,
+                "to": 800000,
+                "base": 22500,
+                "rate": 0.2
+              },
+              {
+                "from": 800000,
+                "to": 2000000,
+                "base": 102500,
+                "rate": 0.25
+              },
+              {
+                "from": 2000000,
+                "to": 8000000,
+                "base": 402500,
+                "rate": 0.3
+              },
+              {
+                "from": 8000000,
+                "to": null,
+                "base": 2202500,
+                "rate": 0.35
+              }
+            ],
+            "thirteenthMonthExemptCeiling": 90000
+          }
+        },
+        "loans": [
+          {
+            "id": "s1",
+            "type": "sss",
+            "balanceCentavos": 9000000,
+            "amortisationCentavos": 900000
+          }
+        ]
+      },
+      "expect": {
+        "blocked": "LOAN_SHORTFALL"
+      }
+    },
+    {
+      "name": "engine: December payout run releases the accrual, taxed above the ceiling",
+      "kind": "computePayslip",
+      "input": {
+        "terms": {
+          "payType": "monthly",
+          "basicRate": 16823.75,
+          "dailyRateBasis": "313",
+          "workWeek": "6_day",
+          "statutoryBasis": "basic",
+          "allowances": []
+        },
+        "period": {
+          "start": "2026-12-11",
+          "end": "2026-12-25"
+        },
+        "entries": [
+          {
+            "date": "2026-12-11",
+            "intervals": [
+              [
+                8,
+                12
+              ],
+              [
+                13,
+                17
+              ]
+            ]
+          }
+        ],
+        "tables": {
+          "sss": {
+            "totalRate": 0.15,
+            "employeeRate": 0.05,
+            "employerRate": 0.1,
+            "mscMin": 5000,
+            "mscMax": 35000,
+            "mscStep": 500,
+            "ec": {
+              "low": 10,
+              "high": 30,
+              "lowMaxMsc": 14500
+            },
+            "mpf": {
+              "mscThreshold": 20000,
+              "employeeRate": 0.05,
+              "employerRate": 0.1
+            }
+          },
+          "philhealth": {
+            "rate": 0.05,
+            "employeeShare": 0.025,
+            "employerShare": 0.025,
+            "floor": 10000,
+            "ceiling": 100000
+          },
+          "pagibig": {
+            "employeeRate": 0.02,
+            "employerRate": 0.02,
+            "employeeRateLow": 0.01,
+            "lowCompensationThreshold": 1500,
+            "maxFundSalary": 10000
+          },
+          "tax": {
+            "annualBrackets": [
+              {
+                "from": 0,
+                "to": 250000,
+                "base": 0,
+                "rate": 0
+              },
+              {
+                "from": 250000,
+                "to": 400000,
+                "base": 0,
+                "rate": 0.15
+              },
+              {
+                "from": 400000,
+                "to": 800000,
+                "base": 22500,
+                "rate": 0.2
+              },
+              {
+                "from": 800000,
+                "to": 2000000,
+                "base": 102500,
+                "rate": 0.25
+              },
+              {
+                "from": 2000000,
+                "to": 8000000,
+                "base": 402500,
+                "rate": 0.3
+              },
+              {
+                "from": 8000000,
+                "to": null,
+                "base": 2202500,
+                "rate": 0.35
+              }
+            ],
+            "thirteenthMonthExemptCeiling": 90000
+          }
+        },
+        "thirteenthMonth": {
+          "accruedCentavos": 5000000,
+          "paidCentavos": 0,
+          "exemptUsedCentavos": 8000000,
+          "ceilingCentavos": 9000000,
+          "isPayoutRun": true
+        }
+      },
+      "expect": {
+        "codes": [
+          "13M",
+          "13M_TAXABLE",
+          "BASIC"
+        ],
+        "thirteenthPayout": 5000000
+      }
+    },
+    {
+      "name": "engine: final pay carries the last salary, SIL conversion and the accrued 13th month",
+      "kind": "computePayslip",
+      "input": {
+        "terms": {
+          "payType": "monthly",
+          "basicRate": 16823.75,
+          "dailyRateBasis": "313",
+          "workWeek": "6_day",
+          "statutoryBasis": "basic",
+          "allowances": []
+        },
+        "period": {
+          "start": "2026-11-25",
+          "end": "2026-12-10"
+        },
+        "entries": [
+          {
+            "date": "2026-11-25",
+            "intervals": [
+              [
+                8,
+                12
+              ],
+              [
+                13,
+                17
+              ]
+            ]
+          }
+        ],
+        "tables": {
+          "sss": {
+            "totalRate": 0.15,
+            "employeeRate": 0.05,
+            "employerRate": 0.1,
+            "mscMin": 5000,
+            "mscMax": 35000,
+            "mscStep": 500,
+            "ec": {
+              "low": 10,
+              "high": 30,
+              "lowMaxMsc": 14500
+            },
+            "mpf": {
+              "mscThreshold": 20000,
+              "employeeRate": 0.05,
+              "employerRate": 0.1
+            }
+          },
+          "philhealth": {
+            "rate": 0.05,
+            "employeeShare": 0.025,
+            "employerShare": 0.025,
+            "floor": 10000,
+            "ceiling": 100000
+          },
+          "pagibig": {
+            "employeeRate": 0.02,
+            "employerRate": 0.02,
+            "employeeRateLow": 0.01,
+            "lowCompensationThreshold": 1500,
+            "maxFundSalary": 10000
+          },
+          "tax": {
+            "annualBrackets": [
+              {
+                "from": 0,
+                "to": 250000,
+                "base": 0,
+                "rate": 0
+              },
+              {
+                "from": 250000,
+                "to": 400000,
+                "base": 0,
+                "rate": 0.15
+              },
+              {
+                "from": 400000,
+                "to": 800000,
+                "base": 22500,
+                "rate": 0.2
+              },
+              {
+                "from": 800000,
+                "to": 2000000,
+                "base": 102500,
+                "rate": 0.25
+              },
+              {
+                "from": 2000000,
+                "to": 8000000,
+                "base": 402500,
+                "rate": 0.3
+              },
+              {
+                "from": 8000000,
+                "to": null,
+                "base": 2202500,
+                "rate": 0.35
+              }
+            ],
+            "thirteenthMonthExemptCeiling": 90000
+          }
+        },
+        "thirteenthMonth": {
+          "accruedCentavos": 1000000,
+          "paidCentavos": 0,
+          "exemptUsedCentavos": 0,
+          "ceilingCentavos": 9000000,
+          "isPayoutRun": false
+        },
+        "separation": {
+          "lastDay": "2026-12-01",
+          "reason": "resignation",
+          "silDaysUnpaid": 10,
+          "yearsOfService": 2
+        }
+      },
+      "expect": {
+        "codes": [
+          "13M",
+          "BASIC",
+          "SIL_CONVERSION"
+        ],
+        "memoCodes": [
+          "13M_ACCRUAL",
+          "RATE_DERIVATION",
+          "SEPARATION",
+          "STATUTORY_BASIS"
+        ],
+        "thirteenthPayout": 1000000
+      }
+    },
+    {
+      "name": "engine: SIL is refused when service is under a year (Art. 95), with a note",
+      "kind": "computePayslip",
+      "input": {
+        "terms": {
+          "payType": "monthly",
+          "basicRate": 16823.75,
+          "dailyRateBasis": "313",
+          "workWeek": "6_day",
+          "statutoryBasis": "basic",
+          "allowances": []
+        },
+        "period": {
+          "start": "2026-11-25",
+          "end": "2026-12-10"
+        },
+        "entries": [
+          {
+            "date": "2026-11-25",
+            "intervals": [
+              [
+                8,
+                12
+              ],
+              [
+                13,
+                17
+              ]
+            ]
+          }
+        ],
+        "tables": {
+          "sss": {
+            "totalRate": 0.15,
+            "employeeRate": 0.05,
+            "employerRate": 0.1,
+            "mscMin": 5000,
+            "mscMax": 35000,
+            "mscStep": 500,
+            "ec": {
+              "low": 10,
+              "high": 30,
+              "lowMaxMsc": 14500
+            },
+            "mpf": {
+              "mscThreshold": 20000,
+              "employeeRate": 0.05,
+              "employerRate": 0.1
+            }
+          },
+          "philhealth": {
+            "rate": 0.05,
+            "employeeShare": 0.025,
+            "employerShare": 0.025,
+            "floor": 10000,
+            "ceiling": 100000
+          },
+          "pagibig": {
+            "employeeRate": 0.02,
+            "employerRate": 0.02,
+            "employeeRateLow": 0.01,
+            "lowCompensationThreshold": 1500,
+            "maxFundSalary": 10000
+          },
+          "tax": {
+            "annualBrackets": [
+              {
+                "from": 0,
+                "to": 250000,
+                "base": 0,
+                "rate": 0
+              },
+              {
+                "from": 250000,
+                "to": 400000,
+                "base": 0,
+                "rate": 0.15
+              },
+              {
+                "from": 400000,
+                "to": 800000,
+                "base": 22500,
+                "rate": 0.2
+              },
+              {
+                "from": 800000,
+                "to": 2000000,
+                "base": 102500,
+                "rate": 0.25
+              },
+              {
+                "from": 2000000,
+                "to": 8000000,
+                "base": 402500,
+                "rate": 0.3
+              },
+              {
+                "from": 8000000,
+                "to": null,
+                "base": 2202500,
+                "rate": 0.35
+              }
+            ],
+            "thirteenthMonthExemptCeiling": 90000
+          }
+        },
+        "separation": {
+          "lastDay": "2026-11-30",
+          "reason": "resignation",
+          "silDaysUnpaid": 5,
+          "yearsOfService": 0
+        }
+      },
+      "expect": {
+        "codes": [
+          "BASIC"
+        ],
+        "silPaid": false
+      }
+    }
+  ]
+}

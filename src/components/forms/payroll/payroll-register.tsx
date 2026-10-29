@@ -212,6 +212,15 @@ export function PayrollRegister({ orgId }: { orgId: Id<"organizations"> }) {
                       <span>
                         {run.totals.employeeCount} payslip(s) · gross{" "}
                         {peso(run.totals.gross)} · net {peso(run.totals.net)}
+                        {runDetail && runDetail.thirteenthMonthAccrued > 0 ? (
+                            <>
+                                {" "}
+                                · 13th month accrued {peso(runDetail.thirteenthMonthAccrued)}
+                            </>
+                        ) : null}
+                        {runDetail && runDetail.loanDeductions > 0 ? (
+                            <> · loans {peso(runDetail.loanDeductions)}</>
+                        ) : null}
                       </span>
                       {run.blocked.length > 0 && (
                         <Badge variant="destructive">

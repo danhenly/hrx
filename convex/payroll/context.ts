@@ -1,4 +1,5 @@
 import type { Doc, Id } from "../_generated/dataModel";
+import { PH_OFFSET_MS } from "../lib/payroll/calendar";
 import type { QueryCtx } from "../_generated/server";
 import { ConvexError } from "convex/values";
 import { computePayslip } from "../lib/payroll/engine";
@@ -15,8 +16,10 @@ import type {
     DayRecord,
     DeminimisTable,
     HolidayRule,
+    Money,
     PayResult,
 } from "../lib/payroll/types";
+import type { LoanState } from "../lib/payroll/loans";
 
 /**
  * The ONE place an employee's payroll inputs are assembled.
@@ -38,7 +41,7 @@ export type TablesInForce = {
     sss?: SssTable;
     philhealth?: PhilhealthTable;
     pagibig?: PagibigTable;
-    tax?: { annualBrackets: Bracket[] };
+    tax?: { annualBrackets: Bracket[]; thirteenthMonthExemptCeiling?: number };
     deminimis?: DeminimisTable;
     holidays: HolidayRule[];
     ids: {
@@ -94,7 +97,11 @@ export async function loadStatutoryTables(
         sss: (sss?.payload as SssTable) ?? undefined,
         philhealth: (philhealth?.payload as PhilhealthTable) ?? undefined,
         pagibig: (pagibig?.payload as PagibigTable) ?? undefined,
-        tax: (tax?.payload as { annualBrackets: Bracket[] }) ?? undefined,
+        tax:
+            (tax?.payload as {
+                annualBrackets: Bracket[];
+                thirteenthMonthExemptCeiling?: number;
+            }) ?? undefined,
         deminimis: (deminimis?.payload as DeminimisTable) ?? undefined,
         holidays: ((holiday?.payload as { days?: HolidayRule[] })?.days ?? []),
         ids: {
@@ -121,6 +128,12 @@ export type EmployeeContext = {
     adjustments: Adjustment[];
     /** Identifiers D16 requires before a payslip may exist (TIN has a fallback). */
     missingIds: string[];
+    /** Active loans with this period's scheduled amortisation (D9). */
+    loans: LoanState[];
+    /** 13th month ledger for the employee's calendar year (D5). */
+    thirteenth: { accruedPesos: number; paidPesos: number; exemptUsedPesos: number };
+    /** Set when this period is the employee's final one (P5.3). */
+    separation?: { lastDay: number; reason: string; silDaysUnpaid: number; yearsOfService: number };
 };
 
 /**
@@ -229,11 +242,61 @@ export async function loadEmployeeContext(
     if (!ids?.philhealthNumber) missingIds.push("philhealthNumber");
     if (!ids?.pagibigNumber) missingIds.push("pagibigNumber");
 
+    const loanRows = await ctx.db
+        .query("loanAccounts")
+        .withIndex("by_org_employee", (q) =>
+            q.eq("orgId", orgId).eq("employeeId", employeeId),
+        )
+        .collect();
+    const loans: LoanState[] = loanRows
+        .filter((row) => row.status === "active" && row.balance > 0)
+        .map((row) => ({
+            id: row._id,
+            type: row.type,
+            balanceCentavos: Math.round(row.balance * 100),
+            amortisationCentavos: Math.round(row.amortisation * 100),
+            reference: row.reference,
+        }));
+
+    const year = new Date(period.endDate + PH_OFFSET_MS).getUTCFullYear();
+    const ledger = await ctx.db
+        .query("thirteenthMonthLedger")
+        .withIndex("by_org_employee_year", (q) =>
+            q.eq("orgId", orgId).eq("employeeId", employeeId).eq("year", year),
+        )
+        .unique();
+
+    // Final period? A position row that ENDS inside this period is a separation, and
+    // final pay applies to it. SIL is 5 days per completed year of service when the
+    // employer has no leave ledger to say otherwise (Art. 95 is mandatory), and the
+    // engine says so in a note rather than pretending the number is known.
+    const separating =
+        positionRow.endDate !== undefined && positionRow.endDate <= period.endDate;
+    const yearsOfService = separating
+        ? Math.floor(
+              (positionRow.endDate! - employee.hireDate) / (365.25 * 24 * 3_600_000),
+          )
+        : 0;
+
     return {
         employee,
         positionRow,
         terms: resolved.terms,
         issues: [],
+        loans,
+        thirteenth: {
+            accruedPesos: ledger?.accrued ?? 0,
+            paidPesos: ledger?.paid ?? 0,
+            exemptUsedPesos: ledger?.exemptUsed ?? 0,
+        },
+        separation: separating
+            ? {
+                  lastDay: positionRow.endDate!,
+                  reason: "separation",
+                  silDaysUnpaid: 5 * Math.max(0, yearsOfService),
+                  yearsOfService,
+              }
+            : undefined,
         days,
         excluded: entries
             .filter((entry) => entry.status !== "approved" && entry.status !== "locked")
@@ -276,11 +339,26 @@ export function computeFromContext(args: {
             deminimis: args.tables.deminimis,
         },
         adjustments: args.context.adjustments,
+        loans: args.context.loans,
+        thirteenthMonth: {
+            accruedCentavos: Math.round(args.context.thirteenth.accruedPesos * 100),
+            paidCentavos: Math.round(args.context.thirteenth.paidPesos * 100),
+            exemptUsedCentavos: Math.round(args.context.thirteenth.exemptUsedPesos * 100),
+            ceilingCentavos: Math.round(
+                (args.tables.tax?.thirteenthMonthExemptCeiling ?? 90_000) * 100,
+            ),
+            // D5: the run whose pay date precedes 24 December releases the accrual.
+            isPayoutRun: (() => {
+                const pay = new Date(args.period.payDate + PH_OFFSET_MS);
+                return pay.getUTCMonth() === 11 && pay.getUTCDate() <= 24;
+            })(),
+        },
+        separation: args.context.separation,
         period: {
             startDate: args.period.startDate,
             endDate: args.period.endDate,
             payDate: args.period.payDate,
-            isYearEnd: false,
+            isYearEnd: new Date(args.period.payDate + PH_OFFSET_MS).getUTCMonth() === 11,
             cutoffIndex: cutoffIndexOf(args.period),
         },
         employment: { start: args.context.employee.hireDate },
