@@ -28,6 +28,12 @@ const libDir = join(root, "convex", "lib", "payroll");
 const fixturesDir = join(libDir, "__fixtures__");
 
 const load = (file) => import(pathToFileURL(join(libDir, file)).href);
+const loadSrc = (file) => import(pathToFileURL(join(root, "src", "lib", file)).href);
+const [bankFiles, sha256] = await Promise.all([
+    load("bankFiles.ts"),
+    load("sha256.ts"),
+]);
+
 const [rates, calendar, tax, engine, premiums, statutory] = await Promise.all([
     load("rates.ts"),
     load("calendar.ts"),
@@ -316,6 +322,29 @@ const handlers = {
         };
     },
 
+    sha256({ text }) {
+        return { hex: sha256.sha256Hex(text) };
+    },
+
+    bankFile({ layoutId, runId, version, rows }) {
+        const layout = bankFiles.BANK_LAYOUTS.find((entry) => entry.id === layoutId);
+        if (!layout) return { filename: null, content: null, rowCount: null, total: null };
+        const result = bankFiles.renderBankFile({ layout, rows, runId, version });
+        return {
+            filename: result.filename,
+            content: result.content,
+            rowCount: result.rowCount,
+            total: result.total,
+            verified: result.layout.verified,
+            // The hash must be the hash of the bytes actually produced.
+            shaMatches: result.sha256 === sha256.sha256Hex(result.content),
+        };
+    },
+
+    registerCsv({ rows }) {
+        return { content: bankFiles.renderRegisterCsv(rows) };
+    },
+
     engineSkeleton() {
         const result = engine.computePayslip({});
         return {
@@ -380,7 +409,7 @@ function runCase(file, fixture, testCase) {
     console.log(`  ok   ${testCase.name}`);
 }
 
-for (const file of ["rates.json", "calendar.json", "premiums.json", "statutory.json"]) {
+for (const file of ["rates.json", "calendar.json", "premiums.json", "statutory.json", "artefacts.json"]) {
     const fixture = JSON.parse(readFileSync(join(fixturesDir, file), "utf8"));
     console.log(`\n${file} — ${fixture.description}`);
     for (const testCase of fixture.cases) runCase(file, fixture, testCase);

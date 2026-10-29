@@ -1,0 +1,153 @@
+{
+  "description": "SHA-256 and the bank-file/register renderers (P4.1). Pure string artefacts, so the fixture asserts the exact bytes a bank receives.",
+  "cases": [
+    {
+      "name": "sha256 of the empty string (FIPS 180-4 vector)",
+      "kind": "sha256",
+      "input": {
+        "text": ""
+      },
+      "expect": {
+        "hex": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    {
+      "name": "sha256 of 'abc' (FIPS 180-4 vector)",
+      "kind": "sha256",
+      "input": {
+        "text": "abc"
+      },
+      "expect": {
+        "hex": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+      }
+    },
+    {
+      "name": "sha256 of the pangram",
+      "kind": "sha256",
+      "input": {
+        "text": "The quick brown fox jumps over the lazy dog"
+      },
+      "expect": {
+        "hex": "d7a8fbb307d7809469ca9abcb0082e4f8d5651e46d3cdb762d02d0bf37c9e592"
+      }
+    },
+    {
+      "name": "sha256 of a 56-byte message \u2014 exercises the padding boundary",
+      "kind": "sha256",
+      "input": {
+        "text": "abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq"
+      },
+      "expect": {
+        "hex": "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1"
+      }
+    },
+    {
+      "name": "generic bank file: header, CRLF, quoted name with a comma, 2-decimal amount",
+      "kind": "bankFile",
+      "input": {
+        "layoutId": "generic",
+        "runId": "abc",
+        "version": 1,
+        "rows": [
+          {
+            "accountNumber": "001234567890",
+            "accountName": "DELA CRUZ, JUAN",
+            "amount": 8886.27,
+            "reference": "RUN-abc-v1"
+          },
+          {
+            "accountNumber": "009876543210",
+            "accountName": "SANTOS, MARIA",
+            "amount": 7676.59,
+            "reference": "RUN-abc-v1"
+          }
+        ]
+      },
+      "expect": {
+        "filename": "hrx-abc-v1-generic.csv",
+        "rowCount": 2,
+        "total": 16562.86,
+        "shaMatches": true,
+        "content": "Account Number,Account Name,Amount,Reference\r\n001234567890,\"DELA CRUZ, JUAN\",8886.27,RUN-abc-v1\r\n009876543210,\"SANTOS, MARIA\",7676.59,RUN-abc-v1\r\n"
+      }
+    },
+    {
+      "name": "BDO layout has no header row and is still unverified against the bank's sample",
+      "kind": "bankFile",
+      "input": {
+        "layoutId": "bdo",
+        "runId": "abc",
+        "version": 2,
+        "rows": [
+          {
+            "accountNumber": "001234567890",
+            "accountName": "DELA CRUZ, JUAN",
+            "amount": 8886.27,
+            "reference": "RUN-abc-v2"
+          }
+        ]
+      },
+      "expect": {
+        "filename": "hrx-abc-v2-bdo.csv",
+        "rowCount": 1,
+        "total": 8886.27,
+        "verified": false,
+        "content": "001234567890,\"DELA CRUZ, JUAN\",8886.27,RUN-abc-v2\r\n"
+      }
+    },
+    {
+      "name": "a row with no account number is refused, not written out to fail at the bank",
+      "kind": "bankFile",
+      "input": {
+        "layoutId": "generic",
+        "runId": "abc",
+        "version": 1,
+        "rows": [
+          {
+            "accountNumber": "",
+            "accountName": "NO ACCOUNT",
+            "amount": 100,
+            "reference": "x"
+          }
+        ]
+      },
+      "expectError": "Missing account number"
+    },
+    {
+      "name": "a non-positive amount is refused (a zero-net row must never reach the bank)",
+      "kind": "bankFile",
+      "input": {
+        "layoutId": "generic",
+        "runId": "abc",
+        "version": 1,
+        "rows": [
+          {
+            "accountNumber": "001",
+            "accountName": "ZERO",
+            "amount": 0,
+            "reference": "x"
+          }
+        ]
+      },
+      "expectError": "not positive"
+    },
+    {
+      "name": "register CSV for the run pack",
+      "kind": "registerCsv",
+      "input": {
+        "rows": [
+          {
+            "employeeName": "DELA CRUZ, JUAN",
+            "gross": 10266.56,
+            "totalDeductions": 1380.29,
+            "net": 8886.27,
+            "employerCost": 1100.5
+          }
+        ]
+      },
+      "expect": {
+        "content": "Employee,Gross,Deductions,Net,Employer Cost\r\n\"DELA CRUZ, JUAN\",10266.56,1380.29,8886.27,1100.50\r\n"
+      }
+    }
+  ]
+}

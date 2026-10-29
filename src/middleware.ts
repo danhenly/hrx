@@ -9,6 +9,9 @@ const isPublicRoute = createRouteMatcher([
   "/sign-in(.*)",
   "/sign-up(.*)",
   "/invite(.*)",
+  // Tokenised payslip portal (D13): the token IS the credential, and the query
+  // behind it resolves to exactly one payslip.
+  "/payslip(.*)",
 ]);
 
 export default convexAuthNextjsMiddleware(async (request, { convexAuth }) => {

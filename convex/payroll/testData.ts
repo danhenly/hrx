@@ -668,6 +668,23 @@ export const teardownPayrollDataset = internalMutation({
         counts.payrollRuns = payrollRuns.length;
         await deleteAll(ctx, payrollRuns.map((row) => row._id));
 
+        // P4's tables. Every stage that adds a table extends BOTH this and
+        // verifyEmpty — a dataset that cannot be removed is as severe as a
+        // miscalculation (§8.1c), and a verify that forgets a table reports success.
+        const payslipLinks = await ctx.db
+            .query("payslipLinks")
+            .withIndex("by_org", (q) => q.eq("orgId", orgId))
+            .collect();
+        counts.payslipLinks = payslipLinks.length;
+        await deleteAll(ctx, payslipLinks.map((row) => row._id));
+
+        const artefacts = await ctx.db
+            .query("payrollArtefacts")
+            .withIndex("by_org", (q) => q.eq("orgId", orgId))
+            .collect();
+        counts.payrollArtefacts = artefacts.length;
+        await deleteAll(ctx, artefacts.map((row) => row._id));
+
         const periods = await ctx.db
             .query("payrollPeriods")
             .withIndex("by_org_start", (q) => q.eq("orgId", orgId))
@@ -759,6 +776,14 @@ export const verifyEmpty = internalMutation({
             .query("payrollRuns")
             .withIndex("by_org_period", (q) => q.eq("orgId", orgId))
             .collect();
+        const payslipLinks = await ctx.db
+            .query("payslipLinks")
+            .withIndex("by_org", (q) => q.eq("orgId", orgId))
+            .collect();
+        const payrollArtefacts = await ctx.db
+            .query("payrollArtefacts")
+            .withIndex("by_org", (q) => q.eq("orgId", orgId))
+            .collect();
         const payrollPeriods = await ctx.db
             .query("payrollPeriods")
             .withIndex("by_org_start", (q) => q.eq("orgId", orgId))
@@ -785,6 +810,8 @@ export const verifyEmpty = internalMutation({
             payslips: payslips.length,
             payslipLines: payslipLines.length,
             payrollInputs: payrollInputs.length,
+            payrollArtefacts: payrollArtefacts.length,
+            payslipLinks: payslipLinks.length,
             auditLogs: auditLogs.length,
             members: members.length,
             organizations,
