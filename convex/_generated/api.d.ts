@@ -35,7 +35,6 @@ import type * as payroll_context from "../payroll/context.js";
 import type * as payroll_employeeStatutoryIds from "../payroll/employeeStatutoryIds.js";
 import type * as payroll_finalPay from "../payroll/finalPay.js";
 import type * as payroll_loans from "../payroll/loans.js";
-import type * as payroll_opsVerifyP5 from "../payroll/opsVerifyP5.js";
 import type * as payroll_payout from "../payroll/payout.js";
 import type * as payroll_payslipLinks from "../payroll/payslipLinks.js";
 import type * as payroll_periods from "../payroll/periods.js";
@@ -84,7 +83,6 @@ declare const fullApi: ApiFromModules<{
   "payroll/employeeStatutoryIds": typeof payroll_employeeStatutoryIds;
   "payroll/finalPay": typeof payroll_finalPay;
   "payroll/loans": typeof payroll_loans;
-  "payroll/opsVerifyP5": typeof payroll_opsVerifyP5;
   "payroll/payout": typeof payroll_payout;
   "payroll/payslipLinks": typeof payroll_payslipLinks;
   "payroll/periods": typeof payroll_periods;
