@@ -1,0 +1,509 @@
+{
+  "description": "P7 year-end: the 2316 and the alphalist come from one annualisation, and refuse to export a mismatch",
+  "cases": [
+    {
+      "name": "2316 tax equals the annualisation path for a 500,000 taxable year",
+      "kind": "yearEnd",
+      "input": {
+        "brackets": [
+          {
+            "from": 0,
+            "to": 250000,
+            "base": 0,
+            "rate": 0
+          },
+          {
+            "from": 250000,
+            "to": 400000,
+            "base": 0,
+            "rate": 0.15
+          },
+          {
+            "from": 400000,
+            "to": 800000,
+            "base": 22500,
+            "rate": 0.2
+          },
+          {
+            "from": 800000,
+            "to": 2000000,
+            "base": 102500,
+            "rate": 0.25
+          },
+          {
+            "from": 2000000,
+            "to": 8000000,
+            "base": 402500,
+            "rate": 0.3
+          },
+          {
+            "from": 8000000,
+            "to": null,
+            "base": 2202500,
+            "rate": 0.35
+          }
+        ],
+        "year": 2026,
+        "rows": [
+          {
+            "employeeId": "e1",
+            "name": "Reyes, Ana",
+            "tin": "123-456-789-000",
+            "grossCentavos": 60000000,
+            "nonTaxableCentavos": 10000000,
+            "withheldCentavos": 4000000
+          }
+        ]
+      },
+      "expect": {
+        "taxable": 50000000,
+        "taxDue": 4250000,
+        "trueUp": 250000,
+        "withheld": 4000000
+      }
+    },
+    {
+      "name": "a year already withheld at the exact tax has a zero true-up",
+      "kind": "yearEnd",
+      "input": {
+        "brackets": [
+          {
+            "from": 0,
+            "to": 250000,
+            "base": 0,
+            "rate": 0
+          },
+          {
+            "from": 250000,
+            "to": 400000,
+            "base": 0,
+            "rate": 0.15
+          },
+          {
+            "from": 400000,
+            "to": 800000,
+            "base": 22500,
+            "rate": 0.2
+          },
+          {
+            "from": 800000,
+            "to": 2000000,
+            "base": 102500,
+            "rate": 0.25
+          },
+          {
+            "from": 2000000,
+            "to": 8000000,
+            "base": 402500,
+            "rate": 0.3
+          },
+          {
+            "from": 8000000,
+            "to": null,
+            "base": 2202500,
+            "rate": 0.35
+          }
+        ],
+        "year": 2026,
+        "rows": [
+          {
+            "employeeId": "e1",
+            "name": "Reyes, Ana",
+            "tin": "1",
+            "grossCentavos": 50000000,
+            "nonTaxableCentavos": 0,
+            "withheldCentavos": 4250000
+          }
+        ]
+      },
+      "expect": {
+        "taxable": 50000000,
+        "taxDue": 4250000,
+        "trueUp": 0
+      }
+    },
+    {
+      "name": "over-withholding surfaces as a negative true-up, not as zero",
+      "kind": "yearEnd",
+      "input": {
+        "brackets": [
+          {
+            "from": 0,
+            "to": 250000,
+            "base": 0,
+            "rate": 0
+          },
+          {
+            "from": 250000,
+            "to": 400000,
+            "base": 0,
+            "rate": 0.15
+          },
+          {
+            "from": 400000,
+            "to": 800000,
+            "base": 22500,
+            "rate": 0.2
+          },
+          {
+            "from": 800000,
+            "to": 2000000,
+            "base": 102500,
+            "rate": 0.25
+          },
+          {
+            "from": 2000000,
+            "to": 8000000,
+            "base": 402500,
+            "rate": 0.3
+          },
+          {
+            "from": 8000000,
+            "to": null,
+            "base": 2202500,
+            "rate": 0.35
+          }
+        ],
+        "year": 2026,
+        "rows": [
+          {
+            "employeeId": "e1",
+            "name": "Reyes, Ana",
+            "tin": "1",
+            "grossCentavos": 50000000,
+            "nonTaxableCentavos": 0,
+            "withheldCentavos": 5000000
+          }
+        ]
+      },
+      "expect": {
+        "trueUp": -750000
+      }
+    },
+    {
+      "name": "13th month below the ceiling is non-taxable, so it never inflates the 2316",
+      "kind": "yearEnd",
+      "input": {
+        "brackets": [
+          {
+            "from": 0,
+            "to": 250000,
+            "base": 0,
+            "rate": 0
+          },
+          {
+            "from": 250000,
+            "to": 400000,
+            "base": 0,
+            "rate": 0.15
+          },
+          {
+            "from": 400000,
+            "to": 800000,
+            "base": 22500,
+            "rate": 0.2
+          },
+          {
+            "from": 800000,
+            "to": 2000000,
+            "base": 102500,
+            "rate": 0.25
+          },
+          {
+            "from": 2000000,
+            "to": 8000000,
+            "base": 402500,
+            "rate": 0.3
+          },
+          {
+            "from": 8000000,
+            "to": null,
+            "base": 2202500,
+            "rate": 0.35
+          }
+        ],
+        "year": 2026,
+        "rows": [
+          {
+            "employeeId": "e1",
+            "name": "Reyes, Ana",
+            "tin": "1",
+            "grossCentavos": 60000000,
+            "nonTaxableCentavos": 9000000,
+            "withheldCentavos": 0
+          }
+        ]
+      },
+      "expect": {
+        "taxable": 51000000,
+        "nonTaxableTotal": 9000000
+      }
+    },
+    {
+      "name": "alphalist totals equal the 1601-C figures they replace",
+      "kind": "yearEnd",
+      "input": {
+        "brackets": [
+          {
+            "from": 0,
+            "to": 250000,
+            "base": 0,
+            "rate": 0
+          },
+          {
+            "from": 250000,
+            "to": 400000,
+            "base": 0,
+            "rate": 0.15
+          },
+          {
+            "from": 400000,
+            "to": 800000,
+            "base": 22500,
+            "rate": 0.2
+          },
+          {
+            "from": 800000,
+            "to": 2000000,
+            "base": 102500,
+            "rate": 0.25
+          },
+          {
+            "from": 2000000,
+            "to": 8000000,
+            "base": 402500,
+            "rate": 0.3
+          },
+          {
+            "from": 8000000,
+            "to": null,
+            "base": 2202500,
+            "rate": 0.35
+          }
+        ],
+        "year": 2026,
+        "rows": [
+          {
+            "employeeId": "e1",
+            "name": "Reyes, Ana",
+            "tin": "1",
+            "grossCentavos": 30000000,
+            "nonTaxableCentavos": 0,
+            "withheldCentavos": 1200000
+          },
+          {
+            "employeeId": "e2",
+            "name": "Cruz, Ben",
+            "tin": "2",
+            "grossCentavos": 24000000,
+            "nonTaxableCentavos": 0,
+            "withheldCentavos": 800000
+          }
+        ]
+      },
+      "expect": {
+        "withheld": 2000000,
+        "grossTotal": 54000000,
+        "csvHasTotals": true,
+        "csvHasVersion": true
+      }
+    },
+    {
+      "name": "preflight refuses an alphalist that does not reconcile (under-remitted)",
+      "kind": "yearEnd",
+      "input": {
+        "brackets": [
+          {
+            "from": 0,
+            "to": 250000,
+            "base": 0,
+            "rate": 0
+          },
+          {
+            "from": 250000,
+            "to": 400000,
+            "base": 0,
+            "rate": 0.15
+          },
+          {
+            "from": 400000,
+            "to": 800000,
+            "base": 22500,
+            "rate": 0.2
+          },
+          {
+            "from": 800000,
+            "to": 2000000,
+            "base": 102500,
+            "rate": 0.25
+          },
+          {
+            "from": 2000000,
+            "to": 8000000,
+            "base": 402500,
+            "rate": 0.3
+          },
+          {
+            "from": 8000000,
+            "to": null,
+            "base": 2202500,
+            "rate": 0.35
+          }
+        ],
+        "year": 2026,
+        "remittedCentavos": 1800000,
+        "rows": [
+          {
+            "employeeId": "e1",
+            "name": "Reyes, Ana",
+            "tin": "1",
+            "grossCentavos": 30000000,
+            "nonTaxableCentavos": 0,
+            "withheldCentavos": 1200000
+          },
+          {
+            "employeeId": "e2",
+            "name": "Cruz, Ben",
+            "tin": "2",
+            "grossCentavos": 24000000,
+            "nonTaxableCentavos": 0,
+            "withheldCentavos": 800000
+          }
+        ]
+      },
+      "expect": {
+        "preflightOk": false,
+        "preflightDifference": 200000,
+        "csvHasVersion": true
+      }
+    },
+    {
+      "name": "carry-forward with a released accrual leaves nothing unexplained",
+      "kind": "yearEnd",
+      "input": {
+        "brackets": [
+          {
+            "from": 0,
+            "to": 250000,
+            "base": 0,
+            "rate": 0
+          },
+          {
+            "from": 250000,
+            "to": 400000,
+            "base": 0,
+            "rate": 0.15
+          },
+          {
+            "from": 400000,
+            "to": 800000,
+            "base": 22500,
+            "rate": 0.2
+          },
+          {
+            "from": 800000,
+            "to": 2000000,
+            "base": 102500,
+            "rate": 0.25
+          },
+          {
+            "from": 2000000,
+            "to": 8000000,
+            "base": 402500,
+            "rate": 0.3
+          },
+          {
+            "from": 8000000,
+            "to": null,
+            "base": 2202500,
+            "rate": 0.35
+          }
+        ],
+        "year": 2026,
+        "carry": {
+          "accruedCentavos": 1682376,
+          "paidCentavos": 1682376,
+          "carriedCentavos": 0
+        },
+        "rows": [
+          {
+            "employeeId": "e1",
+            "name": "Reyes, Ana",
+            "tin": "1",
+            "grossCentavos": 1000000,
+            "nonTaxableCentavos": 0,
+            "withheldCentavos": 0
+          }
+        ]
+      },
+      "expect": {
+        "carryOk": true,
+        "carryUnexplained": 0
+      }
+    },
+    {
+      "name": "an unreleased accrual is NOT zero unexplained (it blocks the close)",
+      "kind": "yearEnd",
+      "input": {
+        "brackets": [
+          {
+            "from": 0,
+            "to": 250000,
+            "base": 0,
+            "rate": 0
+          },
+          {
+            "from": 250000,
+            "to": 400000,
+            "base": 0,
+            "rate": 0.15
+          },
+          {
+            "from": 400000,
+            "to": 800000,
+            "base": 22500,
+            "rate": 0.2
+          },
+          {
+            "from": 800000,
+            "to": 2000000,
+            "base": 102500,
+            "rate": 0.25
+          },
+          {
+            "from": 2000000,
+            "to": 8000000,
+            "base": 402500,
+            "rate": 0.3
+          },
+          {
+            "from": 8000000,
+            "to": null,
+            "base": 2202500,
+            "rate": 0.35
+          }
+        ],
+        "year": 2026,
+        "carry": {
+          "accruedCentavos": 1682376,
+          "paidCentavos": 1000000,
+          "carriedCentavos": 0
+        },
+        "rows": [
+          {
+            "employeeId": "e1",
+            "name": "Reyes, Ana",
+            "tin": "1",
+            "grossCentavos": 1000000,
+            "nonTaxableCentavos": 0,
+            "withheldCentavos": 0
+          }
+        ]
+      },
+      "expect": {
+        "carryOk": false,
+        "carryUnexplained": 682376
+      }
+    }
+  ]
+}

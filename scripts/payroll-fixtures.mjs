@@ -36,7 +36,7 @@ const [bankFilesDoc, sha256Doc] = await Promise.all([
 const bankFiles = bankFilesDoc;
 const sha256 = sha256Doc;
 
-const [rates, calendar, tax, engine, premiums, statutory, thirteenth, govForms, loansLib] = await Promise.all([
+const [rates, calendar, tax, engine, premiums, statutory, thirteenth, govForms, loansLib, yearEndLib] = await Promise.all([
     load("rates.ts"),
     load("calendar.ts"),
     load("tax.ts"),
@@ -46,6 +46,7 @@ const [rates, calendar, tax, engine, premiums, statutory, thirteenth, govForms, 
     load("thirteenth.ts"),
     load("govForms.ts"),
     load("loans.ts"),
+    load("yearEnd.ts"),
 ]);
 
 /** The holiday set the engine fixtures price against (a slice of DOLE LA 12-25). */
@@ -90,6 +91,46 @@ const ms = (dateKey) => calendar.msOfDateKey(dateKey);
 
 /** Each handler returns the object that the fixture's `expect` is matched against. */
 const handlers = {
+
+    yearEnd(input) {
+        const brackets = input.brackets;
+        const rows = input.rows.map((row) => ({ tin: "", thirteenthMonthCentavos: 0, ...row }));
+        const certs = yearEndLib.build2316(rows, brackets);
+        const totals = yearEndLib.alphalistTotals(certs);
+        const csv = yearEndLib.renderAlphalist(
+            {
+                tin: input.orgTin ?? "000-000-000-000",
+                branchCode: "",
+                registeredName: input.registeredName ?? "Test Corp",
+                year: input.year,
+                tableVersion: input.tableVersion ?? "tax@2026-01-01",
+            },
+            certs,
+        );
+        const preflight = yearEndLib.alphalistPreflight({
+            withheldCentavos: totals.withheldCentavos,
+            remittedCentavos: input.remittedCentavos ?? totals.withheldCentavos,
+        });
+        const carry = yearEndLib.carryForward(input.carry ?? { accruedCentavos: 0, paidCentavos: 0, carriedCentavos: 0 });
+        const first = certs[0];
+        return {
+            taxDue: first.taxDueCentavos,
+            taxable: first.taxableCentavos,
+            trueUp: first.trueUpCentavos,
+            withheld: totals.withheldCentavos,
+            taxDueTotal: totals.taxDueCentavos,
+            grossTotal: totals.grossCentavos,
+            nonTaxableTotal: totals.nonTaxableCentavos,
+            preflightOk: preflight.ok,
+            preflightDifference: preflight.differenceCentavos,
+            preflightMessage: preflight.message,
+            carryOk: carry.ok,
+            carryUnexplained: carry.unexplainedCentavos,
+            csvHasVersion: csv.includes(input.tableVersion ?? "tax@2026-01-01"),
+            csvHeaderTin: csv.startsWith(`${input.orgTin ?? "000-000-000-000"}`),
+            csvHasTotals: csv.includes(`TOTAL (${certs.length})`),
+        };
+    },
 
     govBucket(input) {
         const ids = input.payslipIds;
@@ -592,7 +633,7 @@ function runCase(file, fixture, testCase) {
     console.log(`  ok   ${testCase.name}`);
 }
 
-for (const file of ["rates.json", "calendar.json", "premiums.json", "statutory.json", "artefacts.json", "p5.json", "p6.json"]) {
+for (const file of ["rates.json", "calendar.json", "premiums.json", "statutory.json", "artefacts.json", "p5.json", "p6.json", "p7.json"]) {
     const fixture = JSON.parse(readFileSync(join(fixturesDir, file), "utf8"));
     console.log(`\n${file} — ${fixture.description}`);
     for (const testCase of fixture.cases) runCase(file, fixture, testCase);
