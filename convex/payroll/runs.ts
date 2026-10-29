@@ -5,6 +5,7 @@ import type { Id } from "../_generated/dataModel";
 import { logAudit } from "../audit";
 import { requireAdmin, requireAuth, requireMembership } from "../helpers";
 import { fromCentavos } from "../lib/payroll/rates";
+import { periodAccrual, roundDays, serviceMonths } from "../lib/payroll/leave";
 import {
     computeFromContext,
     loadEmployeeContext,
@@ -237,7 +238,18 @@ export async function computeRunCore(
 
         const blocked = [...run.blocked];
 
-        for (const employee of todo) {
+        
+        // Leave types are org data; loading them once keeps the loop O(types) not O(types × employees).
+
+        const leaveTypes = await ctx.db
+
+            .query("leaveTypes")
+
+            .withIndex("by_org", (q) => q.eq("orgId", orgId))
+
+            .collect();
+
+for (const employee of todo) {
             const context = await loadEmployeeContext(ctx, {
                 orgId,
                 employeeId: employee._id,
@@ -350,6 +362,44 @@ export async function computeRunCore(
                         exemptUsed: round2(exemptPayout),
                         updatedAt: Date.now(),
                     });
+                }
+            }
+
+            // P8.2: leave accrues inside the run, so a balance is a number the register
+            // produced. Types with no accrual (maternity, LWOP) never write a row.
+            if (leaveTypes.length > 0) {
+                const months = serviceMonths(employee.hireDate, period.endDate);
+                for (const type of leaveTypes) {
+                    const days = periodAccrual(type, months);
+                    if (days <= 0) continue;
+                    const existing = await ctx.db
+                        .query("leaveLedger")
+                        .withIndex("by_org_employee_period", (q) =>
+                            q.eq("orgId", orgId)
+                                .eq("employeeId", employee._id)
+                                .eq("periodId", period._id),
+                        )
+                        .collect();
+                    const row = existing.find((entry) => entry.leaveCode === type.code);
+                    if (row) {
+                        await ctx.db.patch(row._id, {
+                            accruedDays: roundDays(row.accruedDays + days),
+                            updatedAt: Date.now(),
+                        });
+                    } else {
+                        await ctx.db.insert("leaveLedger", {
+                            orgId,
+                            employeeId: employee._id,
+                            leaveTypeId: type._id,
+                            leaveCode: type.code,
+                            periodId: period._id,
+                            year: new Date(period.endDate + 8 * 3_600_000).getUTCFullYear(),
+                            accruedDays: days,
+                            usedDays: 0,
+                            adjustedDays: 0,
+                            updatedAt: Date.now(),
+                        });
+                    }
                 }
             }
 
