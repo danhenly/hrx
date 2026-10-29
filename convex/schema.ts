@@ -468,6 +468,29 @@ export default defineSchema({
         .index("by_org", ["orgId"]),
 
     /**
+     * A closed year (P7). One row per org per year, written only when the alphalist
+     * reconciles to the remittances — the §1.3 rejection is enforced here, not in a UI.
+     */
+    payrollYearEnds: defineTable({
+        orgId: v.id("organizations"),
+        year: v.number(),
+        employeeCount: v.number(),
+        grossPesos: v.number(),
+        nonTaxablePesos: v.number(),
+        taxablePesos: v.number(),
+        taxDuePesos: v.number(),
+        withheldPesos: v.number(),
+        trueUpPesos: v.number(),
+        alphalistSha256: v.string(),
+        /** Statutory tax table version the year was computed under (D17). */
+        tableVersion: v.string(),
+        closedBy: v.id("users"),
+        closedAt: v.number(),
+    })
+        .index("by_org_year", ["orgId", "year"])
+        .index("by_org", ["orgId"]),
+
+    /**
      * A tokenised link to ONE payslip (D13: an employee sees only their own payslip,
      * with no HR account). The token is random, expiring and revocable; the public
      * query resolves the token to its own payslip and to nothing else.

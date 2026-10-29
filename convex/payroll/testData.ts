@@ -740,6 +740,13 @@ export const teardownPayrollDataset = internalMutation({
         counts.payrollArtefacts = artefacts.length;
         await deleteAll(ctx, artefacts.map((row) => row._id));
 
+        const yearEnds = await ctx.db
+            .query("payrollYearEnds")
+            .withIndex("by_org", (q) => q.eq("orgId", orgId))
+            .collect();
+        counts.payrollYearEnds = yearEnds.length;
+        await deleteAll(ctx, yearEnds.map((row) => row._id));
+
         const periods = await ctx.db
             .query("payrollPeriods")
             .withIndex("by_org_start", (q) => q.eq("orgId", orgId))
@@ -839,6 +846,10 @@ export const verifyEmpty = internalMutation({
             .query("payrollArtefacts")
             .withIndex("by_org", (q) => q.eq("orgId", orgId))
             .collect();
+        const payrollYearEnds = await ctx.db
+            .query("payrollYearEnds")
+            .withIndex("by_org", (q) => q.eq("orgId", orgId))
+            .collect();
         const loanAmortizations = await ctx.db
             .query("loanAmortizations")
             .withIndex("by_org", (q) => q.eq("orgId", orgId))
@@ -887,6 +898,7 @@ export const verifyEmpty = internalMutation({
             loanAmortizations: loanAmortizations.length,
             thirteenthMonthLedger: thirteenthMonthLedger.length,
             finalPayStatements: finalPayStatements.length,
+            payrollYearEnds: payrollYearEnds.length,
             auditLogs: auditLogs.length,
             members: members.length,
             organizations,

@@ -26,15 +26,25 @@ export default function PayrollPage() {
         <SectionHeader>
           <SectionTitle>Payroll</SectionTitle>
           <SectionDescription>
-            A run is computed for a period, reviewed, then approved by an admin. An
-            approved run is frozen — corrections go to the next period as adjustments
-            or to a new version.
+            A run is computed for a period, reviewed, then approved by an admin.
+            An approved run is frozen — corrections go to the next period as
+            adjustments or to a new version.
           </SectionDescription>
         </SectionHeader>
+        <div className="mb-4 flex flex-wrap gap-2">
+          <a
+            className="text-sm underline underline-offset-4"
+            href="/dashboard/payroll/year-end"
+          >
+            Year end &amp; alphalist
+          </a>
+        </div>
         {orgId ? (
           <PayrollRegister orgId={orgId} />
         ) : (
-          <p className="text-muted-foreground text-sm">Select an organisation.</p>
+          <p className="text-muted-foreground text-sm">
+            Select an organisation.
+          </p>
         )}
       </Section>
     </SectionGroup>
