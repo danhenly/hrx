@@ -399,6 +399,7 @@ export default defineSchema({
         source: v.optional(v.object({ type: v.string(), id: v.string() })),
     })
         .index("by_payslip", ["payslipId"])
+        .index("by_run", ["runId"])
         .index("by_org", ["orgId"]),
 
     /**
@@ -481,6 +482,94 @@ export default defineSchema({
     })
         .index("by_token", ["token"])
         .index("by_payslip", ["payslipId"])
+        .index("by_org", ["orgId"]),
+
+    /**
+     * A loan the employee is repaying (P5.3, D9). Statutory loans (SSS salary loan,
+     * Pag-IBIG MPL) and the employer's own loans/advances share one ledger so the
+     * priority order has something uniform to sort.
+     */
+    loanAccounts: defineTable({
+        orgId: v.id("organizations"),
+        employeeId: v.id("employees"),
+        type: v.union(
+            v.literal("sss"),
+            v.literal("pagibig"),
+            v.literal("company"),
+            v.literal("advance"),
+        ),
+        /** Pesos. */
+        principal: v.number(),
+        balance: v.number(),
+        /** Scheduled deduction per cutoff, pesos. */
+        amortisation: v.number(),
+        /** Term in months; the pilot's SSS salary loan uses the standard 10. */
+        termMonths: v.optional(v.number()),
+        reference: v.optional(v.string()),
+        startPeriodId: v.optional(v.id("payrollPeriods")),
+        status: v.union(
+            v.literal("active"),
+            v.literal("closed"),
+            v.literal("written_off"),
+        ),
+        createdBy: v.id("users"),
+        createdAt: v.number(),
+    })
+        .index("by_org_employee", ["orgId", "employeeId"])
+        .index("by_org_status", ["orgId", "status"]),
+
+    /** One row per loan per run — including the periods where nothing was paid (D9). */
+    loanAmortizations: defineTable({
+        orgId: v.id("organizations"),
+        loanId: v.id("loanAccounts"),
+        runId: v.id("payrollRuns"),
+        employeeId: v.id("employees"),
+        amount: v.number(),
+        balanceAfter: v.number(),
+        createdAt: v.number(),
+    })
+        .index("by_loan", ["loanId"])
+        .index("by_run", ["runId"])
+        .index("by_org", ["orgId"]),
+
+    /**
+     * The 13th month ledger (D5): what has accrued per employee per calendar year and
+     * what has been released. The accrual is a memo line on every payslip; this is the
+     * running liability the December payout is computed from.
+     */
+    thirteenthMonthLedger: defineTable({
+        orgId: v.id("organizations"),
+        employeeId: v.id("employees"),
+        year: v.number(),
+        /** Pesos. */
+        accrued: v.number(),
+        paid: v.number(),
+        /** Benefits exemption consumed this year (13th month and other benefits). */
+        exemptUsed: v.number(),
+        updatedAt: v.number(),
+    }).index("by_org_employee_year", ["orgId", "employeeId", "year"]),
+
+    /**
+     * A final-pay statement produced on separation (P5.3). One per employee per
+     * separation date — the mutation refuses a second, so a resigned employee cannot
+     * be paid twice out of two clicks.
+     */
+    finalPayStatements: defineTable({
+        orgId: v.id("organizations"),
+        employeeId: v.id("employees"),
+        separationDate: v.number(),
+        lastDay: v.number(),
+        reason: v.string(),
+        lines: v.any(),
+        totals: v.object({
+            gross: v.number(),
+            deductions: v.number(),
+            net: v.number(),
+        }),
+        createdBy: v.id("users"),
+        createdAt: v.number(),
+    })
+        .index("by_org_employee", ["orgId", "employeeId"])
         .index("by_org", ["orgId"]),
 
     /**

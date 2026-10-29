@@ -31,6 +31,8 @@ import {
     type SssTable,
 } from "./statutory";
 import { withholdingCentavos, type Bracket } from "./tax";
+import { planLoanPayments, type LoanState } from "./loans";
+import { accrualForPeriod, payoutSplit } from "./thirteenth";
 import {
     allowanceTotalOf,
     dailyRateCentavos,
@@ -54,10 +56,10 @@ import type {
 } from "./types";
 
 /** Bumped when the engine's behaviour changes; recorded per run in P3. */
-export const ENGINE_STAGE = "P2-statutory";
+export const ENGINE_STAGE = "P5-13th-finalpay-loans";
 
 /** What is still missing before a payslip may be persisted (P5: loans, 13th month). */
-export const PAYOUT_FEATURES_PENDING = "PAYOUT_FEATURES_PENDING";
+
 
 /** A semi-monthly period is half a month — the conversion for monthly amounts. */
 const PERIODS_PER_YEAR = 24;
@@ -83,6 +85,29 @@ export type ComputePayslipArgs = {
         tax?: { annualBrackets: Bracket[] };
     };
     adjustments?: Adjustment[];
+    /** Outstanding loans with this period's scheduled amortisation (D9). */
+    loans?: LoanState[];
+    /**
+     * 13th month (D5). The run owns the ledger; the engine only prices the accrual
+     * and, when this is the payout run, releases it.
+     */
+    thirteenthMonth?: {
+        accruedCentavos: Money;
+        paidCentavos: Money;
+        exemptUsedCentavos: Money;
+        ceilingCentavos: Money;
+        isPayoutRun: boolean;
+    };
+    /** Final pay on separation (P5.3). */
+    separation?: {
+        /** Manila midnight of the last day worked. */
+        lastDay: number;
+        reason: string;
+        /** Unused SIL days, entered by HR — HRX has no leave module to derive it. */
+        silDaysUnpaid?: number;
+        /** Years of service, used for the SIL entitlement floor (Art. 95). */
+        yearsOfService?: number;
+    };
     ytd?: {
         taxable: Money;
         taxWithheld: Money;
@@ -264,6 +289,98 @@ export function computePayslip(args: ComputePayslipArgs): PayResult {
         });
     }
 
+    // ── 4b. 13th month payout and final pay (D5 / P5.3) ────────────────────
+    // These are EARNINGS, so they must land BEFORE gross taxable is computed —
+    // otherwise the December withholding ignores the payout it is withholding on.
+    let thirteenthPayoutCentavos = 0;
+    if (args.thirteenthMonth?.isPayoutRun) {
+        const split = payoutSplit({
+            accruedCentavos: args.thirteenthMonth.accruedCentavos,
+            paidCentavos: args.thirteenthMonth.paidCentavos,
+            exemptUsedCentavos: args.thirteenthMonth.exemptUsedCentavos,
+            ceilingCentavos: args.thirteenthMonth.ceilingCentavos,
+        });
+        thirteenthPayoutCentavos = split.totalCentavos;
+        if (split.exemptCentavos > 0) {
+            lines.push({
+                kind: "earning",
+                code: "13M",
+                description: "13th month pay (within the ₱90,000 benefits ceiling)",
+                amount: split.exemptCentavos,
+                taxable: false,
+            });
+        }
+        if (split.taxableCentavos > 0) {
+            lines.push({
+                kind: "earning",
+                code: "13M_TAXABLE",
+                description: "13th month pay above the benefits ceiling (taxable)",
+                amount: split.taxableCentavos,
+                taxable: true,
+            });
+        }
+    }
+
+    if (args.separation) {
+        const dailyCentavos = dailyRateCentavos(profile);
+        const silDays = args.separation.silDaysUnpaid ?? 0;
+        // Art. 95: SIL accrues after a year of service. HRX has no leave ledger, so
+        // the unused days are an input, not a guess — and days entered without the
+        // service floor are refused rather than paid.
+        if (silDays > 0) {
+            if ((args.separation.yearsOfService ?? 0) < 1) {
+                notes.push(
+                    "Unused SIL was entered but the employee has under a year of service — SIL conversion was NOT paid (Art. 95).",
+                );
+            } else {
+                lines.push({
+                    kind: "earning",
+                    code: "SIL_CONVERSION",
+                    description: `Unused service incentive leave (${silDays} day(s))`,
+                    quantity: silDays,
+                    amount: roundHalfUp(dailyCentavos * silDays),
+                    taxable: true,
+                });
+            }
+        }
+        // Final pay releases the 13th month accrued so far, prorated by the accrual
+        // itself — no separate proration rule, so it can never disagree with the ledger.
+        if (args.thirteenthMonth) {
+            const split = payoutSplit({
+                accruedCentavos: args.thirteenthMonth.accruedCentavos,
+                paidCentavos: args.thirteenthMonth.paidCentavos,
+                exemptUsedCentavos: args.thirteenthMonth.exemptUsedCentavos,
+                ceilingCentavos: args.thirteenthMonth.ceilingCentavos,
+            });
+            thirteenthPayoutCentavos += split.totalCentavos;
+            if (split.exemptCentavos > 0) {
+                lines.push({
+                    kind: "earning",
+                    code: "13M",
+                    description: "13th month pay on separation (pro-rated)",
+                    amount: split.exemptCentavos,
+                    taxable: false,
+                });
+            }
+            if (split.taxableCentavos > 0) {
+                lines.push({
+                    kind: "earning",
+                    code: "13M_TAXABLE",
+                    description: "13th month above the benefits ceiling (taxable)",
+                    amount: split.taxableCentavos,
+                    taxable: true,
+                });
+            }
+        }
+        lines.push({
+            kind: "memo",
+            code: "SEPARATION",
+            description: `Final pay — last day ${new Date(args.separation.lastDay + 8 * 3_600_000).toISOString().slice(0, 10)}: ${args.separation.reason}`,
+            amount: 0,
+            taxable: false,
+        });
+    }
+
     // ── 5. Statutory contributions (P2.1, D3) ──────────────────────────────
     // The base is a MONTHLY figure: the period's earnings × 2, computed on the
     // basis the org chose (D-PILOT-3), then each contribution is split across the
@@ -399,6 +516,33 @@ export function computePayslip(args: ComputePayslipArgs): PayResult {
         );
     }
 
+    // ── 6b. Loans, in D9's priority order ─────────────────────────────────
+    // Deducted AFTER statutory contributions and tax, because those are never
+    // optional. A schedule that would take net pay below zero blocks the payslip
+    // instead of being quietly trimmed.
+    let loanPayments: {
+        loanId: string;
+        type: string;
+        amountCentavos: Money;
+        balanceAfter: Money;
+    }[] = [];
+    let loanBlocked: { code: string; reason: string } | undefined;
+    if (args.loans && args.loans.length > 0) {
+        const alreadyDeducted = lines
+            .filter((line) => line.kind === "deduction")
+            .reduce((sum, line) => sum + line.amount, 0);
+        const plan = planLoanPayments({
+            loans: args.loans,
+            availableCentavos: Math.max(0, grossEarnings - alreadyDeducted),
+        });
+        if (plan.blocked) {
+            loanBlocked = plan.blocked;
+        } else {
+            lines.push(...plan.lines);
+            loanPayments = plan.payments;
+        }
+    }
+
     // ── 7. Memo lines: the payslip must state how the daily rate was derived
     // (D7) and which statutory basis it will use (D-PILOT-3). ──────────────
     lines.push({
@@ -408,6 +552,18 @@ export function computePayslip(args: ComputePayslipArgs): PayResult {
         amount: 0,
         taxable: false,
     });
+    const accrual = args.thirteenthMonth
+        ? accrualForPeriod({ basicEarnedCentavos: wageCentavos })
+        : 0;
+    if (args.thirteenthMonth) {
+        lines.push({
+            kind: "memo",
+            code: "13M_ACCRUAL",
+            description: `13th month accrued this period (1/12 of ₱${(wageCentavos / 100).toFixed(2)} basic earned)`,
+            amount: accrual,
+            taxable: false,
+        });
+    }
     lines.push({
         kind: "memo",
         code: "STATUTORY_BASIS",
@@ -426,13 +582,13 @@ export function computePayslip(args: ComputePayslipArgs): PayResult {
         notes,
         pricedDays: pricedDayCount,
         absentDays: absentMinutes / NORMAL_MINUTES_PER_DAY,
-        blocked: {
-            code: PAYOUT_FEATURES_PENDING,
-            reason:
-                `Engine stage ${ENGINE_STAGE}: earnings, statutory contributions and ` +
-                "withholding tax are computed, but loans and 13th month are P5. The net " +
-                "below is NOT a payable amount and this payslip must not be persisted.",
-        },
+        thirteenthMonthAccrualCentavos: accrual,
+        thirteenthMonthPayoutCentavos: thirteenthPayoutCentavos,
+        loanPayments,
+        // Nothing is missing from the payslip as of P5 — the only blocker left is a
+        // loan schedule that does not fit (D9). December annualisation (P7) changes
+        // the TAX line of a year-end run, which is noted rather than blocked.
+        blocked: loanBlocked,
     };
 }
 

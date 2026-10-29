@@ -701,7 +701,7 @@
       }
     },
     {
-      "name": "every result is still blocked: loans and 13th month are P5",
+      "name": "no blocker remains once loans and 13th month exist (P5 closed the gap)",
       "kind": "computePayslip",
       "input": {
         "terms": {
@@ -719,7 +719,7 @@
         "entries": []
       },
       "expect": {
-        "blocked": "PAYOUT_FEATURES_PENDING"
+        "blocked": null
       }
     },
     {

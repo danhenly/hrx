@@ -580,7 +580,7 @@
         "gross": 841188,
         "totalDeductions": 73529,
         "net": 767659,
-        "blocked": "PAYOUT_FEATURES_PENDING"
+        "blocked": null
       }
     },
     {

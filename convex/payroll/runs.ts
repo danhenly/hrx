@@ -77,10 +77,26 @@ export const get = query({
             }),
         );
 
+        // D5: "13th month accrued to date", visible on the run page. It is a memo,
+        // not money — summing the memo lines keeps the run and the payslip agreeing
+        // without a second stored total that could drift.
+        const lines = await ctx.db
+            .query("payslipLines")
+            .withIndex("by_run", (q) => q.eq("runId", runId))
+            .collect();
+        const thirteenthMonthAccrued = lines
+            .filter((line) => line.kind === "memo" && line.code === "13M_ACCRUAL")
+            .reduce((sum, line) => sum + line.amount, 0);
+        const loanTotal = lines
+            .filter((line) => line.kind === "deduction" && line.code.endsWith("_LOAN"))
+            .reduce((sum, line) => sum + line.amount, 0);
+
         return {
             run,
             period,
             payslips: rows.sort((a, b) => a.employeeName.localeCompare(b.employeeName)),
+            thirteenthMonthAccrued: Math.round(thirteenthMonthAccrued * 100) / 100,
+            loanDeductions: Math.round(loanTotal * 100) / 100,
         };
     },
 });
@@ -273,6 +289,68 @@ export async function computeRunCore(
                     taxable: line.taxable,
                     source: line.source,
                 });
+            }
+
+            // D9: book the amortisation and move the balance. A run that skips this
+            // leaves the loan looking untouched while the payslip says it was paid.
+            for (const payment of result.loanPayments ?? []) {
+                const loanId = payment.loanId as Id<"loanAccounts">;
+                await ctx.db.insert("loanAmortizations", {
+                    orgId,
+                    loanId,
+                    runId,
+                    employeeId: employee._id,
+                    amount: fromCentavos(payment.amountCentavos),
+                    balanceAfter: fromCentavos(payment.balanceAfter),
+                    createdAt: Date.now(),
+                });
+                const loan = await ctx.db.get(loanId);
+                if (loan) {
+                    await ctx.db.patch(loanId, {
+                        balance: fromCentavos(payment.balanceAfter),
+                        status: payment.balanceAfter <= 0 ? "closed" : loan.status,
+                    });
+                }
+            }
+
+            // D5: keep the accrual ledger current. The memo line on the payslip is the
+            // evidence; this is what the December payout is computed from.
+            const accrual = fromCentavos(result.thirteenthMonthAccrualCentavos ?? 0);
+            const payout = fromCentavos(result.thirteenthMonthPayoutCentavos ?? 0);
+            const exemptPayout = fromCentavos(
+                result.lines
+                    .filter((line) => line.kind === "earning" && line.code === "13M")
+                    .reduce((sum, line) => sum + line.amount, 0),
+            );
+            if (accrual !== 0 || payout !== 0) {
+                const ledgerYear = new Date(period.endDate + 8 * 3_600_000).getUTCFullYear();
+                const ledger = await ctx.db
+                    .query("thirteenthMonthLedger")
+                    .withIndex("by_org_employee_year", (q) =>
+                        q.eq("orgId", orgId)
+                            .eq("employeeId", employee._id)
+                            .eq("year", ledgerYear),
+                    )
+                    .unique();
+                const round2 = (value: number) => Math.round(value * 100) / 100;
+                if (ledger) {
+                    await ctx.db.patch(ledger._id, {
+                        accrued: round2(ledger.accrued + accrual),
+                        paid: round2(ledger.paid + payout),
+                        exemptUsed: round2(ledger.exemptUsed + exemptPayout),
+                        updatedAt: Date.now(),
+                    });
+                } else {
+                    await ctx.db.insert("thirteenthMonthLedger", {
+                        orgId,
+                        employeeId: employee._id,
+                        year: ledgerYear,
+                        accrued: round2(accrual),
+                        paid: round2(payout),
+                        exemptUsed: round2(exemptPayout),
+                        updatedAt: Date.now(),
+                    });
+                }
             }
 
             // The snapshot that makes this payslip reproducible (§5).

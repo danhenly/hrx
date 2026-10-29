@@ -29,18 +29,22 @@ const fixturesDir = join(libDir, "__fixtures__");
 
 const load = (file) => import(pathToFileURL(join(libDir, file)).href);
 const loadSrc = (file) => import(pathToFileURL(join(root, "src", "lib", file)).href);
-const [bankFiles, sha256] = await Promise.all([
+const [bankFilesDoc, sha256Doc] = await Promise.all([
     load("bankFiles.ts"),
     load("sha256.ts"),
 ]);
+const bankFiles = bankFilesDoc;
+const sha256 = sha256Doc;
 
-const [rates, calendar, tax, engine, premiums, statutory] = await Promise.all([
+const [rates, calendar, tax, engine, premiums, statutory, thirteenth, loansLib] = await Promise.all([
     load("rates.ts"),
     load("calendar.ts"),
     load("tax.ts"),
     load("engine.ts"),
     load("premiums.ts"),
     load("statutory.ts"),
+    load("thirteenth.ts"),
+    load("loans.ts"),
 ]);
 
 /** The holiday set the engine fixtures price against (a slice of DOLE LA 12-25). */
@@ -200,7 +204,19 @@ const handlers = {
         return { minutes: premiums.nightMinutes(intervalsOn(anchor, intervals)) };
     },
 
-    computePayslip({ terms, period, entries, deminimis, tables, cutoffIndex, employmentStart, employmentEnd }) {
+    computePayslip({
+        terms,
+        period,
+        entries,
+        deminimis,
+        tables,
+        cutoffIndex,
+        employmentStart,
+        employmentEnd,
+        loans,
+        thirteenthMonth,
+        separation,
+    }) {
         const startDate = calendar.msOfDateKey(period.start);
         const endDate = calendar.msOfDateKey(period.end);
         const days = (entries ?? []).map((entry) => {
@@ -221,6 +237,18 @@ const handlers = {
             holidayTable: FIXTURE_HOLIDAYS,
             tables: { deminimis, ...(tables ?? {}) },
             adjustments: [],
+            loans,
+            thirteenthMonth: thirteenthMonth
+                ? { ...thirteenthMonth, isPayoutRun: thirteenthMonth.isPayoutRun === true }
+                : undefined,
+            separation: separation
+                ? {
+                      lastDay: calendar.msOfDateKey(separation.lastDay),
+                      reason: separation.reason,
+                      silDaysUnpaid: separation.silDaysUnpaid,
+                      yearsOfService: separation.yearsOfService,
+                  }
+                : undefined,
             period: {
                 startDate,
                 endDate,
@@ -247,9 +275,19 @@ const handlers = {
                     .map((line) => line.code),
             ),
         ].sort();
+        const memoCodes = [
+            ...new Set(
+                result.lines.filter((line) => line.kind === "memo").map((line) => line.code),
+            ),
+        ].sort();
         return {
             codes,
+            memoCodes,
             deductionCodes,
+            thirteenthAccrual: result.thirteenthMonthAccrualCentavos ?? 0,
+            thirteenthPayout: result.thirteenthMonthPayoutCentavos ?? 0,
+            loanPayments: (result.loanPayments ?? []).length,
+            silPaid: result.lines.some((line) => line.code === "SIL_CONVERSION"),
             gross: result.gross,
             totalDeductions: result.totalDeductions,
             net: result.net,
@@ -345,6 +383,53 @@ const handlers = {
         return { content: bankFiles.renderRegisterCsv(rows) };
     },
 
+    accrual({ basicEarnedCentavos }) {
+        return { centavos: thirteenth.accrualForPeriod({ basicEarnedCentavos }) };
+    },
+
+    accrualYear({ perCutoffCentavos, cutoffs }) {
+        let total = 0;
+        for (let index = 0; index < cutoffs; index += 1) {
+            total += thirteenth.accrualForPeriod({ basicEarnedCentavos: perCutoffCentavos });
+        }
+        return { totalCentavos: total };
+    },
+
+    accrualYearBound({ perCutoffCentavos, cutoffs }) {
+        let total = 0;
+        for (let index = 0; index < cutoffs; index += 1) {
+            total += thirteenth.accrualForPeriod({ basicEarnedCentavos: perCutoffCentavos });
+        }
+        const exact = (perCutoffCentavos * cutoffs) / 12;
+        // The stated rule allows up to half a centavo of error per period.
+        return { within12Cents: Math.abs(total - exact) <= cutoffs / 2 };
+    },
+
+    payoutSplit(input) {
+        return thirteenth.payoutSplit(input);
+    },
+
+    instalments({ principalCentavos, termMonths }) {
+        const list = thirteenth.equalInstalments({ principalCentavos, termMonths });
+        return {
+            first: list[0],
+            count: list.length,
+            last: list[list.length - 1],
+            sum: list.reduce((total, value) => total + value, 0),
+        };
+    },
+
+    planLoans({ availableCentavos, loans }) {
+        const plan = loansLib.planLoanPayments({ loans, availableCentavos });
+        const paid = plan.payments.reduce((total, payment) => total + payment.amountCentavos, 0);
+        return {
+            order: plan.payments.map((payment) => payment.loanId),
+            paid,
+            remaining: availableCentavos - paid,
+            blocked: plan.blocked?.code ?? null,
+        };
+    },
+
     engineSkeleton() {
         const result = engine.computePayslip({});
         return {
@@ -409,7 +494,7 @@ function runCase(file, fixture, testCase) {
     console.log(`  ok   ${testCase.name}`);
 }
 
-for (const file of ["rates.json", "calendar.json", "premiums.json", "statutory.json", "artefacts.json"]) {
+for (const file of ["rates.json", "calendar.json", "premiums.json", "statutory.json", "artefacts.json", "p5.json"]) {
     const fixture = JSON.parse(readFileSync(join(fixturesDir, file), "utf8"));
     console.log(`\n${file} — ${fixture.description}`);
     for (const testCase of fixture.cases) runCase(file, fixture, testCase);
