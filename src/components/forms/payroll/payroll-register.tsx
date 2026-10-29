@@ -464,6 +464,15 @@ export function PayrollRegister({ orgId }: { orgId: Id<"organizations"> }) {
                 >
                   Run pack
                 </Button>
+                <Button size="sm" variant="outline" asChild>
+                  <a
+                    href={`/dashboard/payroll/forms/${runDetail.run._id}`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Government forms
+                  </a>
+                </Button>
                 <Button size="sm" variant="ghost" asChild>
                   <a
                     href={`/payslips/run/${runDetail.run._id}`}
