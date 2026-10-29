@@ -1,0 +1,726 @@
+{
+  "description": "premiums.ts + engine.ts \u2014 \u00a72.5 day pricing, D8 monthly-vs-daily, night differential, allowances and the de minimis split (P1). Amounts are integer centavos.",
+  "cases": [
+    {
+      "name": "ordinary day worked 8h, daily-paid: 645.00 exactly (no hourly-rounding drift)",
+      "kind": "priceDay",
+      "input": {
+        "terms": {
+          "payType": "daily",
+          "basicRate": 645,
+          "dailyRateBasis": "313",
+          "workWeek": "6_day",
+          "statutoryBasis": "basic",
+          "allowances": []
+        },
+        "date": "2026-08-31",
+        "intervals": [
+          [
+            8,
+            12
+          ],
+          [
+            13,
+            17
+          ]
+        ],
+        "dayType": "ordinary",
+        "isRestDay": false
+      },
+      "expect": {
+        "codes": [
+          "BASIC"
+        ],
+        "amounts": [
+          64500
+        ],
+        "workedMinutes": 480
+      }
+    },
+    {
+      "name": "rest day worked 8h, daily-paid: 130%",
+      "kind": "priceDay",
+      "input": {
+        "terms": {
+          "payType": "daily",
+          "basicRate": 645,
+          "dailyRateBasis": "313",
+          "workWeek": "6_day",
+          "statutoryBasis": "basic",
+          "allowances": []
+        },
+        "date": "2026-07-18",
+        "intervals": [
+          [
+            8,
+            12
+          ],
+          [
+            13,
+            17
+          ]
+        ],
+        "dayType": "ordinary",
+        "isRestDay": true
+      },
+      "expect": {
+        "codes": [
+          "RD"
+        ],
+        "amounts": [
+          83850
+        ]
+      }
+    },
+    {
+      "name": "regular holiday worked 8h, daily-paid: 200%",
+      "kind": "priceDay",
+      "input": {
+        "terms": {
+          "payType": "daily",
+          "basicRate": 645,
+          "dailyRateBasis": "313",
+          "workWeek": "6_day",
+          "statutoryBasis": "basic",
+          "allowances": []
+        },
+        "date": "2026-08-31",
+        "intervals": [
+          [
+            8,
+            12
+          ],
+          [
+            13,
+            17
+          ]
+        ],
+        "dayType": "regular",
+        "isRestDay": false
+      },
+      "expect": {
+        "codes": [
+          "RH"
+        ],
+        "amounts": [
+          129000
+        ]
+      }
+    },
+    {
+      "name": "regular holiday worked on a REST day: 200% x 130% = 260% (stacking)",
+      "kind": "priceDay",
+      "input": {
+        "terms": {
+          "payType": "daily",
+          "basicRate": 645,
+          "dailyRateBasis": "313",
+          "workWeek": "6_day",
+          "statutoryBasis": "basic",
+          "allowances": []
+        },
+        "date": "2026-11-30",
+        "intervals": [
+          [
+            8,
+            12
+          ],
+          [
+            13,
+            17
+          ]
+        ],
+        "dayType": "regular",
+        "isRestDay": true
+      },
+      "expect": {
+        "codes": [
+          "RH"
+        ],
+        "amounts": [
+          167700
+        ]
+      }
+    },
+    {
+      "name": "regular holiday + 2h OT, daily-paid: holiday 200% then OT at 130%",
+      "kind": "priceDay",
+      "input": {
+        "terms": {
+          "payType": "daily",
+          "basicRate": 645,
+          "dailyRateBasis": "313",
+          "workWeek": "6_day",
+          "statutoryBasis": "basic",
+          "allowances": []
+        },
+        "date": "2026-08-31",
+        "intervals": [
+          [
+            8,
+            12
+          ],
+          [
+            13,
+            19
+          ]
+        ],
+        "dayType": "regular",
+        "isRestDay": false
+      },
+      "expect": {
+        "codes": [
+          "OT",
+          "RH"
+        ],
+        "amounts": [
+          20963,
+          129000
+        ],
+        "otMinutes": 120
+      }
+    },
+    {
+      "name": "unworked regular holiday, daily-paid, worked the day before: 100% line (D8)",
+      "kind": "priceDay",
+      "input": {
+        "terms": {
+          "payType": "daily",
+          "basicRate": 645,
+          "dailyRateBasis": "313",
+          "workWeek": "6_day",
+          "statutoryBasis": "basic",
+          "allowances": []
+        },
+        "date": "2026-11-30",
+        "intervals": [],
+        "dayType": "regular",
+        "isRestDay": false,
+        "priorDayWorked": true
+      },
+      "expect": {
+        "codes": [
+          "RH_UNWORKED"
+        ],
+        "amounts": [
+          64500
+        ]
+      }
+    },
+    {
+      "name": "unworked regular holiday, daily-paid, did NOT work the day before: no holiday pay",
+      "kind": "priceDay",
+      "input": {
+        "terms": {
+          "payType": "daily",
+          "basicRate": 645,
+          "dailyRateBasis": "313",
+          "workWeek": "6_day",
+          "statutoryBasis": "basic",
+          "allowances": []
+        },
+        "date": "2026-11-30",
+        "intervals": [],
+        "dayType": "regular",
+        "isRestDay": false,
+        "priorDayWorked": false
+      },
+      "expect": {
+        "codes": [],
+        "amounts": []
+      }
+    },
+    {
+      "name": "unworked regular holiday, MONTHLY-paid: no line at all \u2014 already in the monthly rate (D8)",
+      "kind": "priceDay",
+      "input": {
+        "terms": {
+          "payType": "monthly",
+          "basicRate": 30000,
+          "dailyRateBasis": "313",
+          "workWeek": "6_day",
+          "statutoryBasis": "basic",
+          "allowances": []
+        },
+        "date": "2026-11-30",
+        "intervals": [],
+        "dayType": "regular",
+        "isRestDay": false,
+        "priorDayWorked": true
+      },
+      "expect": {
+        "codes": [],
+        "amounts": []
+      }
+    },
+    {
+      "name": "ordinary day worked 8h, monthly-paid: premium only, and 0% means no line",
+      "kind": "priceDay",
+      "input": {
+        "terms": {
+          "payType": "monthly",
+          "basicRate": 30000,
+          "dailyRateBasis": "313",
+          "workWeek": "6_day",
+          "statutoryBasis": "basic",
+          "allowances": []
+        },
+        "date": "2026-08-31",
+        "intervals": [
+          [
+            8,
+            12
+          ],
+          [
+            13,
+            17
+          ]
+        ],
+        "dayType": "ordinary",
+        "isRestDay": false
+      },
+      "expect": {
+        "codes": [],
+        "amounts": []
+      }
+    },
+    {
+      "name": "rest day worked, monthly-paid: +30% premium (345.05 on a 1,150.16 daily rate)",
+      "kind": "priceDay",
+      "input": {
+        "terms": {
+          "payType": "monthly",
+          "basicRate": 30000,
+          "dailyRateBasis": "313",
+          "workWeek": "6_day",
+          "statutoryBasis": "basic",
+          "allowances": []
+        },
+        "date": "2026-07-18",
+        "intervals": [
+          [
+            8,
+            12
+          ],
+          [
+            13,
+            17
+          ]
+        ],
+        "dayType": "ordinary",
+        "isRestDay": true
+      },
+      "expect": {
+        "codes": [
+          "RD"
+        ],
+        "amounts": [
+          34505
+        ]
+      }
+    },
+    {
+      "name": "regular holiday worked, monthly-paid: +100% premium",
+      "kind": "priceDay",
+      "input": {
+        "terms": {
+          "payType": "monthly",
+          "basicRate": 30000,
+          "dailyRateBasis": "313",
+          "workWeek": "6_day",
+          "statutoryBasis": "basic",
+          "allowances": []
+        },
+        "date": "2026-08-31",
+        "intervals": [
+          [
+            8,
+            12
+          ],
+          [
+            13,
+            17
+          ]
+        ],
+        "dayType": "regular",
+        "isRestDay": false
+      },
+      "expect": {
+        "codes": [
+          "RH"
+        ],
+        "amounts": [
+          115016
+        ]
+      }
+    },
+    {
+      "name": "special non-working day worked: 130% (daily-paid)",
+      "kind": "priceDay",
+      "input": {
+        "terms": {
+          "payType": "daily",
+          "basicRate": 645,
+          "dailyRateBasis": "313",
+          "workWeek": "6_day",
+          "statutoryBasis": "basic",
+          "allowances": []
+        },
+        "date": "2026-11-01",
+        "intervals": [
+          [
+            8,
+            12
+          ],
+          [
+            13,
+            17
+          ]
+        ],
+        "dayType": "special_non_working",
+        "isRestDay": false
+      },
+      "expect": {
+        "codes": [
+          "SH"
+        ],
+        "amounts": [
+          83850
+        ]
+      }
+    },
+    {
+      "name": "night differential: 22:00-06:00 is 480 night minutes",
+      "kind": "nightMinutes",
+      "input": {
+        "date": "2026-11-10",
+        "intervals": [
+          [
+            22,
+            30
+          ]
+        ]
+      },
+      "expect": {
+        "minutes": 480
+      }
+    },
+    {
+      "name": "night differential: a day shift with a lunch break has none",
+      "kind": "nightMinutes",
+      "input": {
+        "date": "2026-11-10",
+        "intervals": [
+          [
+            8,
+            12
+          ],
+          [
+            13,
+            17
+          ]
+        ]
+      },
+      "expect": {
+        "minutes": 0
+      }
+    },
+    {
+      "name": "night differential: 20:00-02:00 is 4 night hours, counted on the start date",
+      "kind": "nightMinutes",
+      "input": {
+        "date": "2026-11-10",
+        "intervals": [
+          [
+            20,
+            26
+          ]
+        ]
+      },
+      "expect": {
+        "minutes": 240
+      }
+    },
+    {
+      "name": "night shift priced: BASIC 645.00 + ND 10% (64.50)",
+      "kind": "priceDay",
+      "input": {
+        "terms": {
+          "payType": "daily",
+          "basicRate": 645,
+          "dailyRateBasis": "313",
+          "workWeek": "6_day",
+          "statutoryBasis": "basic",
+          "allowances": []
+        },
+        "date": "2026-11-10",
+        "intervals": [
+          [
+            22,
+            30
+          ]
+        ],
+        "dayType": "ordinary",
+        "isRestDay": false
+      },
+      "expect": {
+        "codes": [
+          "BASIC",
+          "ND"
+        ],
+        "amounts": [
+          64500,
+          6450
+        ],
+        "nightMinutes": 480
+      }
+    },
+    {
+      "name": "D8 both ways, daily-paid: rest-day work 130% + the unworked regular holiday it precedes",
+      "kind": "computePayslip",
+      "input": {
+        "terms": {
+          "payType": "daily",
+          "basicRate": 645,
+          "dailyRateBasis": "313",
+          "workWeek": "6_day",
+          "statutoryBasis": "basic",
+          "allowances": []
+        },
+        "period": {
+          "start": "2026-11-16",
+          "end": "2026-11-30"
+        },
+        "entries": [
+          {
+            "date": "2026-11-29",
+            "intervals": [
+              [
+                8,
+                12
+              ],
+              [
+                13,
+                17
+              ]
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "codes": [
+          "RD",
+          "RH_UNWORKED"
+        ],
+        "gross": 148350
+      }
+    },
+    {
+      "name": "D8 both ways, monthly-paid: same days, NO unworked-holiday line (only the rest-day premium)",
+      "kind": "computePayslip",
+      "input": {
+        "terms": {
+          "payType": "monthly",
+          "basicRate": 30000,
+          "dailyRateBasis": "313",
+          "workWeek": "6_day",
+          "statutoryBasis": "basic",
+          "allowances": []
+        },
+        "period": {
+          "start": "2026-11-16",
+          "end": "2026-11-30"
+        },
+        "entries": [
+          {
+            "date": "2026-11-29",
+            "intervals": [
+              [
+                8,
+                12
+              ],
+              [
+                13,
+                17
+              ]
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "codes": [
+          "BASIC",
+          "RD"
+        ],
+        "gross": 1534505
+      }
+    },
+    {
+      "name": "allowances inside the ceiling: rice exempt, transpo taxable",
+      "kind": "computePayslip",
+      "input": {
+        "terms": {
+          "payType": "monthly",
+          "basicRate": 30000,
+          "dailyRateBasis": "313",
+          "workWeek": "6_day",
+          "statutoryBasis": "basic",
+          "allowances": [
+            {
+              "code": "RICE",
+              "description": "Rice subsidy",
+              "amount": 2500,
+              "taxable": false,
+              "deMinimisCategory": "RICE",
+              "unit": "monthly"
+            },
+            {
+              "code": "TRANSPO",
+              "description": "Transportation allowance",
+              "amount": 1500,
+              "taxable": true,
+              "unit": "monthly"
+            }
+          ]
+        },
+        "period": {
+          "start": "2026-11-16",
+          "end": "2026-11-30"
+        },
+        "entries": [],
+        "deminimis": {
+          "ceilings": [
+            {
+              "key": "RICE",
+              "label": "Rice subsidy",
+              "unit": "peso",
+              "ceiling": 2500,
+              "period": "monthly"
+            },
+            {
+              "key": "LAUNDRY",
+              "label": "Laundry allowance",
+              "unit": "peso",
+              "ceiling": 400,
+              "period": "monthly"
+            },
+            {
+              "key": "UNIFORM",
+              "label": "Uniform and clothing allowance",
+              "unit": "peso",
+              "ceiling": 8000,
+              "period": "annual"
+            },
+            {
+              "key": "MEAL_OT",
+              "label": "Meal allowance for OT",
+              "unit": "percent_of_min_wage",
+              "ceiling": null,
+              "period": "per_day",
+              "percentOfMinWage": 0.3
+            }
+          ]
+        }
+      },
+      "expect": {
+        "codes": [
+          "ALW_RICE",
+          "ALW_TRANSPO_TAXABLE",
+          "BASIC"
+        ],
+        "gross": 1700000
+      }
+    },
+    {
+      "name": "allowance above the ceiling splits: 3,000/month rice -> 1,250 exempt + 250 taxable per cutoff",
+      "kind": "computePayslip",
+      "input": {
+        "terms": {
+          "payType": "monthly",
+          "basicRate": 30000,
+          "dailyRateBasis": "313",
+          "workWeek": "6_day",
+          "statutoryBasis": "basic",
+          "allowances": [
+            {
+              "code": "RICE",
+              "description": "Rice subsidy",
+              "amount": 3000,
+              "taxable": false,
+              "deMinimisCategory": "RICE",
+              "unit": "monthly"
+            }
+          ]
+        },
+        "period": {
+          "start": "2026-11-16",
+          "end": "2026-11-30"
+        },
+        "entries": [],
+        "deminimis": {
+          "ceilings": [
+            {
+              "key": "RICE",
+              "label": "Rice subsidy",
+              "unit": "peso",
+              "ceiling": 2500,
+              "period": "monthly"
+            },
+            {
+              "key": "LAUNDRY",
+              "label": "Laundry allowance",
+              "unit": "peso",
+              "ceiling": 400,
+              "period": "monthly"
+            },
+            {
+              "key": "UNIFORM",
+              "label": "Uniform and clothing allowance",
+              "unit": "peso",
+              "ceiling": 8000,
+              "period": "annual"
+            },
+            {
+              "key": "MEAL_OT",
+              "label": "Meal allowance for OT",
+              "unit": "percent_of_min_wage",
+              "ceiling": null,
+              "period": "per_day",
+              "percentOfMinWage": 0.3
+            }
+          ]
+        }
+      },
+      "expect": {
+        "codes": [
+          "ALW_RICE",
+          "ALW_RICE_TAXABLE",
+          "BASIC"
+        ],
+        "gross": 1650000
+      }
+    },
+    {
+      "name": "every P1 result is blocked: earnings exist, statutory deductions do not",
+      "kind": "computePayslip",
+      "input": {
+        "terms": {
+          "payType": "monthly",
+          "basicRate": 30000,
+          "dailyRateBasis": "313",
+          "workWeek": "6_day",
+          "statutoryBasis": "basic",
+          "allowances": []
+        },
+        "period": {
+          "start": "2026-11-16",
+          "end": "2026-11-30"
+        },
+        "entries": []
+      },
+      "expect": {
+        "blocked": "STATUTORY_PENDING"
+      }
+    }
+  ]
+}

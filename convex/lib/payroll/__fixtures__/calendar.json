@@ -350,15 +350,10 @@
       "expectError": "contiguous"
     },
     {
-      "name": "engine skeleton refuses to look computed: blocked, zero totals (P0.6)",
+      "name": "engine refuses a call with no argument object, naming what is missing (P1 took over the skeleton)",
       "kind": "engineSkeleton",
       "input": {},
-      "expect": {
-        "blocked": "ENGINE_SKELETON",
-        "gross": 0,
-        "net": 0,
-        "lines": 0
-      }
+      "expectError": "missing profile, days, period"
     }
   ]
 }
