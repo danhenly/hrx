@@ -132,6 +132,8 @@ export type PayResult = {
     nightHours?: number;
     /** Calendar days that produced at least one line. */
     pricedDays?: number;
+    /** Days deducted as unpaid absence or undertime (monthly-paid). */
+    absentDays?: number;
     /** Anything the reviewer must know that is not a line (unevaluated ceilings…). */
     notes?: string[];
     blocked?: { code: string; reason: string };

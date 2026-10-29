@@ -20,9 +20,10 @@ import {
     isRestDay,
     workDaysInRange,
 } from "./calendar";
-import { priceDay } from "./premiums";
+import { isInMonthlyRate, NORMAL_MINUTES_PER_DAY, priceDay } from "./premiums";
 import {
     allowanceTotalOf,
+    dailyRateCentavos,
     hourlyRateCentavos,
     NORMAL_HOURS_PER_DAY,
     periodBasicPay,
@@ -161,6 +162,7 @@ export function computePayslip(args: ComputePayslipArgs): PayResult {
     let workedMinutes = 0;
     let nightMinuteCount = 0;
     let pricedDayCount = 0;
+    let absentMinutes = 0;
 
     for (const date of eachDay(period.startDate, period.endDate)) {
         // Employment window: nothing is priced outside it.
@@ -188,6 +190,37 @@ export function computePayslip(args: ComputePayslipArgs): PayResult {
         lines.push(...priced.lines);
         workedMinutes += priced.workedMinutes;
         nightMinuteCount += priced.nightMinutes;
+
+        // Absence: the monthly rate pays for the SCHEDULE, so time not worked is
+        // deducted automatically — full days and undertime alike. Regular holidays
+        // and rest days are paid whether worked or not, so they never deduct; a
+        // special non-working day is already "no work, no pay" and is paid only for
+        // the hours actually worked, so it never deducts either.
+        if (profile.payType === "monthly" && !isRestDay(date, profile.workWeek)) {
+            const dayType = classifyDay(date, args.holidayTable);
+            if (dayType === "ordinary" || dayType === "special_working") {
+                const shortfall = NORMAL_MINUTES_PER_DAY - Math.min(
+                    record?.totalMinutes ?? 0,
+                    NORMAL_MINUTES_PER_DAY,
+                );
+                if (shortfall > 0) {
+                    absentMinutes += shortfall;
+                }
+            }
+        }
+    }
+
+    if (absentMinutes > 0) {
+        const dailyCentavos = dailyRateCentavos(profile);
+        const perMinute = dailyCentavos / NORMAL_MINUTES_PER_DAY;
+        lines.push({
+            kind: "deduction",
+            code: "ABSENCE",
+            description: `Unpaid absence / undertime (${(absentMinutes / NORMAL_MINUTES_PER_DAY).toFixed(2)} day(s))`,
+            quantity: absentMinutes / NORMAL_MINUTES_PER_DAY,
+            amount: roundHalfUp(perMinute * absentMinutes),
+            taxable: false,
+        });
     }
 
     // ── 3. Allowances (D15 / P1.3) ─────────────────────────────────────────
@@ -239,6 +272,7 @@ export function computePayslip(args: ComputePayslipArgs): PayResult {
         nightHours: nightMinuteCount / 60,
         notes,
         pricedDays: pricedDayCount,
+        absentDays: absentMinutes / NORMAL_MINUTES_PER_DAY,
         blocked: {
             code: STATUTORY_PENDING,
             reason:

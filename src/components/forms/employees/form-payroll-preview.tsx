@@ -176,9 +176,12 @@ export function FormPayrollPreview({
             </span>
             <span className="text-muted-foreground">
               Deductions {peso(preview.result.totalDeductions)}
+              {preview.result.absentDays
+                ? ` (${preview.result.absentDays} absent day(s))`
+                : ""}
             </span>
             <span className="text-muted-foreground">
-              Earnings-only total {peso(preview.result.net)}
+              Net before statutory {peso(preview.result.net)}
             </span>
           </div>
 

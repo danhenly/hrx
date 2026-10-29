@@ -721,6 +721,212 @@
       "expect": {
         "blocked": "STATUTORY_PENDING"
       }
+    },
+    {
+      "name": "special NON-WORKING day worked, monthly-paid: the FULL 130% (that day is not in the monthly rate)",
+      "kind": "priceDay",
+      "input": {
+        "terms": {
+          "payType": "monthly",
+          "basicRate": 30000,
+          "dailyRateBasis": "313",
+          "workWeek": "6_day",
+          "statutoryBasis": "basic",
+          "allowances": []
+        },
+        "date": "2026-11-02",
+        "intervals": [
+          [
+            8,
+            12
+          ],
+          [
+            13,
+            17
+          ]
+        ],
+        "dayType": "special_non_working",
+        "isRestDay": false
+      },
+      "expect": {
+        "codes": [
+          "SH"
+        ],
+        "amounts": [
+          149521
+        ]
+      }
+    },
+    {
+      "name": "absence auto-deduction: a monthly-paid employee with no days worked loses 12 scheduled days (the regular holiday is NOT deducted)",
+      "kind": "computePayslip",
+      "input": {
+        "terms": {
+          "payType": "monthly",
+          "basicRate": 30000,
+          "dailyRateBasis": "313",
+          "workWeek": "6_day",
+          "statutoryBasis": "basic",
+          "allowances": []
+        },
+        "period": {
+          "start": "2026-11-16",
+          "end": "2026-11-30"
+        },
+        "entries": []
+      },
+      "expect": {
+        "codes": [
+          "BASIC"
+        ],
+        "deductionCodes": [
+          "ABSENCE"
+        ],
+        "gross": 1500000,
+        "totalDeductions": 1380192,
+        "net": 119808,
+        "absentDays": 12
+      }
+    },
+    {
+      "name": "absence auto-deduction: one day worked out of 13 scheduled leaves 11 deducted",
+      "kind": "computePayslip",
+      "input": {
+        "terms": {
+          "payType": "monthly",
+          "basicRate": 30000,
+          "dailyRateBasis": "313",
+          "workWeek": "6_day",
+          "statutoryBasis": "basic",
+          "allowances": []
+        },
+        "period": {
+          "start": "2026-11-16",
+          "end": "2026-11-30"
+        },
+        "entries": [
+          {
+            "date": "2026-11-16",
+            "intervals": [
+              [
+                8,
+                12
+              ],
+              [
+                13,
+                17
+              ]
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "codes": [
+          "BASIC"
+        ],
+        "deductionCodes": [
+          "ABSENCE"
+        ],
+        "gross": 1500000,
+        "totalDeductions": 1265176,
+        "net": 234824,
+        "absentDays": 11
+      }
+    },
+    {
+      "name": "absence auto-deduction: a special non-working day is not deducted (it is already no-work-no-pay)",
+      "kind": "computePayslip",
+      "input": {
+        "terms": {
+          "payType": "monthly",
+          "basicRate": 30000,
+          "dailyRateBasis": "313",
+          "workWeek": "6_day",
+          "statutoryBasis": "basic",
+          "allowances": []
+        },
+        "period": {
+          "start": "2026-11-02",
+          "end": "2026-11-15"
+        },
+        "entries": []
+      },
+      "expect": {
+        "codes": [
+          "BASIC"
+        ],
+        "deductionCodes": [
+          "ABSENCE"
+        ],
+        "gross": 1500000,
+        "totalDeductions": 1265176,
+        "net": 234824,
+        "absentDays": 11
+      }
+    },
+    {
+      "name": "absence auto-deduction: undertime is pro-rated (4 of 8 hours worked = half a day deducted)",
+      "kind": "computePayslip",
+      "input": {
+        "terms": {
+          "payType": "monthly",
+          "basicRate": 30000,
+          "dailyRateBasis": "313",
+          "workWeek": "6_day",
+          "statutoryBasis": "basic",
+          "allowances": []
+        },
+        "period": {
+          "start": "2026-11-16",
+          "end": "2026-11-16"
+        },
+        "entries": [
+          {
+            "date": "2026-11-16",
+            "intervals": [
+              [
+                8,
+                12
+              ]
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "codes": [
+          "BASIC"
+        ],
+        "deductionCodes": [
+          "ABSENCE"
+        ],
+        "absentDays": 0.5
+      }
+    },
+    {
+      "name": "no absence deduction for daily-paid: an unworked day is simply unpaid",
+      "kind": "computePayslip",
+      "input": {
+        "terms": {
+          "payType": "daily",
+          "basicRate": 645,
+          "dailyRateBasis": "313",
+          "workWeek": "6_day",
+          "statutoryBasis": "basic",
+          "allowances": []
+        },
+        "period": {
+          "start": "2026-11-16",
+          "end": "2026-11-30"
+        },
+        "entries": []
+      },
+      "expect": {
+        "codes": [],
+        "deductionCodes": [],
+        "gross": 0,
+        "net": 0,
+        "absentDays": 0
+      }
     }
   ]
 }

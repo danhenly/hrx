@@ -95,6 +95,21 @@ export function nightMinutes(intervals: { start: number; end: number }[]): numbe
     );
 }
 
+/**
+ * Is this day ALREADY PAID by the monthly rate?
+ *
+ * Rest days and regular holidays are paid whether worked or not, so a monthly-paid
+ * employee working them earns only the premium. A SPECIAL NON-WORKING day is "no
+ * work, no pay" (RA 9492 / §2.5), so it is NOT in the monthly rate: working it pays
+ * the full 130%, and not working it is an absence (auto-deducted by the engine).
+ *
+ * Getting this backwards is the quiet error: treating a special non-working day as
+ * "in the rate" pays +30% for a day the employee was never paid for.
+ */
+export function isInMonthlyRate(dayType: DayType): boolean {
+    return dayType !== "special_non_working";
+}
+
 /** The earning code a worked day is booked under. */
 export function earningCodeFor(classification: DayClassification): string {
     if (classification.dayType === "regular") return "RH";
@@ -152,6 +167,8 @@ export function priceDay(args: {
 
     const workedMinutes = Math.max(0, Math.min(args.totalMinutes, 8 * 60 * 2));
     const isMonthly = terms.payType === "monthly";
+    /** Monthly-paid: book the premium only, unless the day is not in the rate. */
+    const premiumOnly = isMonthly && isInMonthlyRate(classification.dayType);
     const lines: PayslipLine[] = [];
 
     if (workedMinutes === 0) {
@@ -192,7 +209,7 @@ export function priceDay(args: {
     const code = earningCodeFor(classification);
 
     const grossAmount = perMinute * normalMinutes * multiplier;
-    const amount = isMonthly
+    const amount = premiumOnly
         ? // Only the part above 100% is new money for a monthly-paid employee.
           roundHalfUp(perMinute * normalMinutes * (multiplier - 1))
         : roundHalfUp(grossAmount);
@@ -201,7 +218,7 @@ export function priceDay(args: {
         lines.push({
             kind: "earning",
             code,
-            description: describeDay(code, classification, multiplier, isMonthly),
+            description: describeDay(code, classification, multiplier, premiumOnly),
             quantity: normalMinutes / MINUTES_PER_HOUR,
             rate: hourly,
             amount,

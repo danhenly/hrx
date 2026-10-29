@@ -42,6 +42,7 @@ const FIXTURE_HOLIDAYS = [
     { date: "2026-02-25", name: "EDSA People Power Revolution Anniversary", type: "special_working" },
     { date: "2026-08-31", name: "National Heroes Day", type: "regular" },
     { date: "2026-11-01", name: "All Saints' Day", type: "special_non_working" },
+    { date: "2026-11-02", name: "All Souls' Day", type: "special_non_working" },
     { date: "2026-11-30", name: "Bonifacio Day", type: "regular" },
     { date: "2026-12-25", name: "Christmas Day", type: "regular" },
 ];
@@ -226,10 +227,20 @@ const handlers = {
                 result.lines.filter((line) => line.kind === "earning").map((line) => line.code),
             ),
         ].sort();
+        const deductionCodes = [
+            ...new Set(
+                result.lines
+                    .filter((line) => line.kind === "deduction")
+                    .map((line) => line.code),
+            ),
+        ].sort();
         return {
             codes,
+            deductionCodes,
             gross: result.gross,
+            totalDeductions: result.totalDeductions,
             net: result.net,
+            absentDays: Number((result.absentDays ?? 0).toFixed(4)),
             blocked: result.blocked?.code ?? null,
             lines: result.lines.length,
         };
