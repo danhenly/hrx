@@ -386,6 +386,7 @@ const handlers = {
         loans,
         thirteenthMonth,
         separation,
+        leave,
     }) {
         const startDate = calendar.msOfDateKey(period.start);
         const endDate = calendar.msOfDateKey(period.end);
@@ -418,6 +419,9 @@ const handlers = {
                       silDaysUnpaid: separation.silDaysUnpaid,
                       yearsOfService: separation.yearsOfService,
                   }
+                : undefined,
+            leave: leave
+                ? { paidDates: leave.paidDates.map((date) => calendar.msOfDateKey(date)) }
                 : undefined,
             period: {
                 startDate,

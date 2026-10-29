@@ -114,6 +114,99 @@
       "expect": {
         "centavos": 0
       }
+    },
+    {
+      "name": "control: without leave the window still books absences (6 scheduled days)",
+      "kind": "computePayslip",
+      "input": {
+        "terms": {
+          "payType": "monthly",
+          "basicRate": 16823.75,
+          "dailyRateBasis": "313",
+          "workWeek": "6_day",
+          "statutoryBasis": "basic",
+          "allowances": []
+        },
+        "period": {
+          "start": "2026-11-02",
+          "end": "2026-11-09"
+        },
+        "entries": [],
+        "tables": {},
+        "cutoffIndex": 0,
+        "deminimis": {}
+      },
+      "expect": {
+        "absentDays": 6
+      }
+    },
+    {
+      "name": "three paid leave days remove exactly three absences",
+      "kind": "computePayslip",
+      "input": {
+        "terms": {
+          "payType": "monthly",
+          "basicRate": 16823.75,
+          "dailyRateBasis": "313",
+          "workWeek": "6_day",
+          "statutoryBasis": "basic",
+          "allowances": []
+        },
+        "period": {
+          "start": "2026-11-02",
+          "end": "2026-11-09"
+        },
+        "entries": [],
+        "tables": {},
+        "cutoffIndex": 0,
+        "deminimis": {},
+        "leave": {
+          "paidDates": [
+            "2026-11-02",
+            "2026-11-03",
+            "2026-11-04"
+          ]
+        }
+      },
+      "expect": {
+        "absentDays": 4
+      }
+    },
+    {
+      "name": "a paid leave day still books no ABSENCE for itself and no night differential",
+      "kind": "computePayslip",
+      "input": {
+        "terms": {
+          "payType": "monthly",
+          "basicRate": 16823.75,
+          "dailyRateBasis": "313",
+          "workWeek": "6_day",
+          "statutoryBasis": "basic",
+          "allowances": []
+        },
+        "period": {
+          "start": "2026-11-02",
+          "end": "2026-11-09"
+        },
+        "entries": [],
+        "tables": {},
+        "cutoffIndex": 0,
+        "deminimis": {},
+        "leave": {
+          "paidDates": [
+            "2026-11-02",
+            "2026-11-03",
+            "2026-11-04",
+            "2026-11-05",
+            "2026-11-06",
+            "2026-11-07",
+            "2026-11-09"
+          ]
+        }
+      },
+      "expect": {
+        "absentDays": 0
+      }
     }
   ]
 }
