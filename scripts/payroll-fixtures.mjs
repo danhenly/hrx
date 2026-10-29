@@ -36,7 +36,7 @@ const [bankFilesDoc, sha256Doc] = await Promise.all([
 const bankFiles = bankFilesDoc;
 const sha256 = sha256Doc;
 
-const [rates, calendar, tax, engine, premiums, statutory, thirteenth, govForms, loansLib, yearEndLib, leaveLib] = await Promise.all([
+const [rates, calendar, tax, engine, premiums, statutory, thirteenth, govForms, loansLib, yearEndLib, leaveLib, readinessLib] = await Promise.all([
     load("rates.ts"),
     load("calendar.ts"),
     load("tax.ts"),
@@ -48,6 +48,7 @@ const [rates, calendar, tax, engine, premiums, statutory, thirteenth, govForms, 
     load("loans.ts"),
     load("yearEnd.ts"),
     load("leave.ts"),
+    load("readiness.ts"),
 ]);
 
 /** The holiday set the engine fixtures price against (a slice of DOLE LA 12-25). */
@@ -92,6 +93,21 @@ const ms = (dateKey) => calendar.msOfDateKey(dateKey);
 
 /** Each handler returns the object that the fixture's `expect` is matched against. */
 const handlers = {
+
+    readiness(input) {
+        const report = readinessLib.readinessReport(input.items);
+        return {
+            ready: report.ready,
+            blockers: report.blockers.length,
+            warnings: report.warnings.length,
+            blockerCount: report.blockerCount,
+            firstBlocker: report.blockers[0]?.id ?? null,
+            loanFits: readinessLib.loanFitsNet({
+                netCentavos: input.netCentavos ?? 0,
+                scheduledCentavos: input.scheduledCentavos ?? 0,
+            }),
+        };
+    },
 
     leave(input) {
         const STANDARD = leaveLib.STANDARD_LEAVE_TYPES;
@@ -668,7 +684,7 @@ function runCase(file, fixture, testCase) {
     console.log(`  ok   ${testCase.name}`);
 }
 
-for (const file of ["rates.json", "calendar.json", "premiums.json", "statutory.json", "artefacts.json", "p5.json", "p6.json", "p7.json", "p8.json"]) {
+for (const file of ["rates.json", "calendar.json", "premiums.json", "statutory.json", "artefacts.json", "p5.json", "p6.json", "p7.json", "p8.json", "p9.json"]) {
     const fixture = JSON.parse(readFileSync(join(fixturesDir, file), "utf8"));
     console.log(`\n${file} — ${fixture.description}`);
     for (const testCase of fixture.cases) runCase(file, fixture, testCase);

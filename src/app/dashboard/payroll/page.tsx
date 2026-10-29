@@ -38,6 +38,12 @@ export default function PayrollPage() {
           >
             Year end &amp; alphalist
           </a>
+          <a
+            className="text-sm underline underline-offset-4"
+            href="/dashboard/payroll/readiness"
+          >
+            Readiness check
+          </a>
         </div>
         {orgId ? (
           <PayrollRegister orgId={orgId} />

@@ -1,0 +1,136 @@
+{
+  "description": "P9 readiness: a blocker stops payday, a warning does not, and an unpayable loan is caught before payday",
+  "cases": [
+    {
+      "name": "a clean org is ready",
+      "kind": "readiness",
+      "input": {
+        "items": [
+          {
+            "id": "table.sss",
+            "severity": "blocker",
+            "title": "table.sss",
+            "count": 0,
+            "detail": "",
+            "fix": ""
+          },
+          {
+            "id": "id.tin",
+            "severity": "warning",
+            "title": "id.tin",
+            "count": 3,
+            "detail": "",
+            "fix": ""
+          }
+        ]
+      },
+      "expect": {
+        "ready": true,
+        "blockers": 0,
+        "warnings": 1,
+        "blockerCount": 0,
+        "firstBlocker": null
+      }
+    },
+    {
+      "name": "one blocker means not ready, and names the first one",
+      "kind": "readiness",
+      "input": {
+        "items": [
+          {
+            "id": "table.sss",
+            "severity": "blocker",
+            "title": "table.sss",
+            "count": 0,
+            "detail": "",
+            "fix": ""
+          },
+          {
+            "id": "bank.account",
+            "severity": "blocker",
+            "title": "bank.account",
+            "count": 4,
+            "detail": "",
+            "fix": ""
+          },
+          {
+            "id": "id.tin",
+            "severity": "warning",
+            "title": "id.tin",
+            "count": 1,
+            "detail": "",
+            "fix": ""
+          }
+        ]
+      },
+      "expect": {
+        "ready": false,
+        "blockers": 1,
+        "warnings": 1,
+        "firstBlocker": "bank.account"
+      }
+    },
+    {
+      "name": "two blockers are counted separately from warnings",
+      "kind": "readiness",
+      "input": {
+        "items": [
+          {
+            "id": "table.tax",
+            "severity": "blocker",
+            "title": "table.tax",
+            "count": 1,
+            "detail": "",
+            "fix": ""
+          },
+          {
+            "id": "bank.account",
+            "severity": "blocker",
+            "title": "bank.account",
+            "count": 2,
+            "detail": "",
+            "fix": ""
+          },
+          {
+            "id": "leave.types",
+            "severity": "warning",
+            "title": "leave.types",
+            "count": 1,
+            "detail": "",
+            "fix": ""
+          }
+        ]
+      },
+      "expect": {
+        "ready": false,
+        "blockers": 2,
+        "warnings": 1
+      }
+    },
+    {
+      "name": "a loan larger than net pay does not fit",
+      "kind": "readiness",
+      "input": {
+        "items": [],
+        "netCentavos": 500000,
+        "scheduledCentavos": 600000
+      },
+      "expect": {
+        "ready": true,
+        "loanFits": false
+      }
+    },
+    {
+      "name": "a loan equal to net pay fits exactly",
+      "kind": "readiness",
+      "input": {
+        "items": [],
+        "netCentavos": 500000,
+        "scheduledCentavos": 500000
+      },
+      "expect": {
+        "loanFits": true
+      }
+    }
+  ]
+}
