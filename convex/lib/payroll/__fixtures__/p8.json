@@ -1,0 +1,119 @@
+{
+  "description": "P8 leave: accrual is a real balance, and only a convertible type pays out",
+  "cases": [
+    {
+      "name": "SIL accrues 5/12 of a day per period",
+      "kind": "leave",
+      "input": {
+        "op": "accrual",
+        "type": "SIL",
+        "serviceMonths": 24
+      },
+      "expect": {
+        "days": 0.4167
+      }
+    },
+    {
+      "name": "nothing accrues before the minimum service (Art. 95)",
+      "kind": "leave",
+      "input": {
+        "op": "accrual",
+        "type": "SIL",
+        "serviceMonths": 6
+      },
+      "expect": {
+        "days": 0
+      }
+    },
+    {
+      "name": "a 12-period year totals the entitlement exactly",
+      "kind": "leave",
+      "input": {
+        "op": "yearTotal",
+        "type": "SIL",
+        "periods": 12,
+        "serviceMonths": 36
+      },
+      "expect": {
+        "days": 5
+      }
+    },
+    {
+      "name": "VL accrues 10/12 and also totals exactly",
+      "kind": "leave",
+      "input": {
+        "op": "yearTotal",
+        "type": "VL",
+        "periods": 12,
+        "serviceMonths": 3
+      },
+      "expect": {
+        "days": 10
+      }
+    },
+    {
+      "name": "a non-accruing type (maternity) never accrues",
+      "kind": "leave",
+      "input": {
+        "op": "accrual",
+        "type": "MAT",
+        "serviceMonths": 60
+      },
+      "expect": {
+        "days": 0
+      }
+    },
+    {
+      "name": "balance is accrued minus used plus adjustments",
+      "kind": "leave",
+      "input": {
+        "op": "balance",
+        "accrued": 10,
+        "used": 3.5,
+        "adjusted": -0.5
+      },
+      "expect": {
+        "days": 6
+      }
+    },
+    {
+      "name": "only a convertible type converts at separation",
+      "kind": "leave",
+      "input": {
+        "op": "convert",
+        "type": "SIL",
+        "balance": 7,
+        "dailyCentavos": 64500
+      },
+      "expect": {
+        "centavos": 451500
+      }
+    },
+    {
+      "name": "a non-convertible balance pays nothing",
+      "kind": "leave",
+      "input": {
+        "op": "convert",
+        "type": "VL",
+        "balance": 10,
+        "dailyCentavos": 64500
+      },
+      "expect": {
+        "centavos": 0
+      }
+    },
+    {
+      "name": "a negative balance converts to zero, not to a debt",
+      "kind": "leave",
+      "input": {
+        "op": "convert",
+        "type": "SIL",
+        "balance": -2,
+        "dailyCentavos": 64500
+      },
+      "expect": {
+        "centavos": 0
+      }
+    }
+  ]
+}

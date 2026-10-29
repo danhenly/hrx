@@ -747,6 +747,20 @@ export const teardownPayrollDataset = internalMutation({
         counts.payrollYearEnds = yearEnds.length;
         await deleteAll(ctx, yearEnds.map((row) => row._id));
 
+        const leaveLedger = await ctx.db
+            .query("leaveLedger")
+            .withIndex("by_org", (q) => q.eq("orgId", orgId))
+            .collect();
+        counts.leaveLedger = leaveLedger.length;
+        await deleteAll(ctx, leaveLedger.map((row) => row._id));
+
+        const leaveTypes = await ctx.db
+            .query("leaveTypes")
+            .withIndex("by_org", (q) => q.eq("orgId", orgId))
+            .collect();
+        counts.leaveTypes = leaveTypes.length;
+        await deleteAll(ctx, leaveTypes.map((row) => row._id));
+
         const periods = await ctx.db
             .query("payrollPeriods")
             .withIndex("by_org_start", (q) => q.eq("orgId", orgId))
@@ -850,6 +864,14 @@ export const verifyEmpty = internalMutation({
             .query("payrollYearEnds")
             .withIndex("by_org", (q) => q.eq("orgId", orgId))
             .collect();
+        const leaveLedger = await ctx.db
+            .query("leaveLedger")
+            .withIndex("by_org", (q) => q.eq("orgId", orgId))
+            .collect();
+        const leaveTypes = await ctx.db
+            .query("leaveTypes")
+            .withIndex("by_org", (q) => q.eq("orgId", orgId))
+            .collect();
         const loanAmortizations = await ctx.db
             .query("loanAmortizations")
             .withIndex("by_org", (q) => q.eq("orgId", orgId))
@@ -899,6 +921,8 @@ export const verifyEmpty = internalMutation({
             thirteenthMonthLedger: thirteenthMonthLedger.length,
             finalPayStatements: finalPayStatements.length,
             payrollYearEnds: payrollYearEnds.length,
+            leaveTypes: leaveTypes.length,
+            leaveLedger: leaveLedger.length,
             auditLogs: auditLogs.length,
             members: members.length,
             organizations,

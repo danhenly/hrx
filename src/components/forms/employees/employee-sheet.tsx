@@ -20,6 +20,7 @@ import {
 } from "./form-employee-profile";
 import { FormEmployeeStatutoryIds } from "./form-employee-statutory-ids";
 import { FormEmployeeLoans } from "./form-employee-loans";
+import { FormEmployeeLeave } from "./form-employee-leave";
 import { FormPayrollPreview } from "./form-payroll-preview";
 import { FormPositionHistory } from "./form-position-history";
 
@@ -124,6 +125,9 @@ function EditEmployeeSheetContent({
                 <TabsTrigger value="loans" className="flex-1">
                     Loans
                 </TabsTrigger>
+                <TabsTrigger value="leave" className="flex-1">
+                    Leave
+                </TabsTrigger>
                 <TabsTrigger value="preview" className="flex-1">
                     Preview
                 </TabsTrigger>
@@ -162,6 +166,15 @@ function EditEmployeeSheetContent({
             <TabsContent value="loans">
                 {orgId ? (
                     <FormEmployeeLoans
+                        employeeId={employee._id as Id<"employees">}
+                        orgId={orgId}
+                    />
+                ) : null}
+            </TabsContent>
+
+            <TabsContent value="leave">
+                {orgId ? (
+                    <FormEmployeeLeave
                         employeeId={employee._id as Id<"employees">}
                         orgId={orgId}
                     />

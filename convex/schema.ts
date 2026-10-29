@@ -471,6 +471,52 @@ export default defineSchema({
      * A closed year (P7). One row per org per year, written only when the alphalist
      * reconciles to the remittances — the §1.3 rejection is enforced here, not in a UI.
      */
+    /**
+     * Leave types (P8.1) — org data, seeded with the PH-standard set and editable.
+     * `leaveTypes.daysPerYear` is an entitlement, never a computed balance.
+     */
+    leaveTypes: defineTable({
+        orgId: v.id("organizations"),
+        code: v.string(),
+        name: v.string(),
+        paid: v.boolean(),
+        accrualBasis: v.union(
+            v.literal("monthly"),
+            v.literal("annual"),
+            v.literal("none"),
+        ),
+        daysPerYear: v.number(),
+        convertibleOnSeparation: v.boolean(),
+        /** Minimum service before anything accrues (SIL: 12 months). */
+        minServiceMonths: v.number(),
+        statutory: v.boolean(),
+        updatedBy: v.id("users"),
+        updatedAt: v.number(),
+    })
+        .index("by_org_code", ["orgId", "code"])
+        .index("by_org", ["orgId"]),
+
+    /**
+     * Leave ledger (P8.2) — one row per employee, leave type and payroll period. Written
+     * by the payroll run that accrued it, so a balance can never disagree with the
+     * register that produced it.
+     */
+    leaveLedger: defineTable({
+        orgId: v.id("organizations"),
+        employeeId: v.id("employees"),
+        leaveTypeId: v.id("leaveTypes"),
+        leaveCode: v.string(),
+        periodId: v.id("payrollPeriods"),
+        year: v.number(),
+        accruedDays: v.number(),
+        usedDays: v.number(),
+        adjustedDays: v.number(),
+        updatedAt: v.number(),
+    })
+        .index("by_org_employee_period", ["orgId", "employeeId", "periodId"])
+        .index("by_org_year", ["orgId", "year"])
+        .index("by_org", ["orgId"]),
+
     payrollYearEnds: defineTable({
         orgId: v.id("organizations"),
         year: v.number(),
