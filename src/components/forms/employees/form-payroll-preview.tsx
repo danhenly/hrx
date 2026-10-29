@@ -116,6 +116,13 @@ export function FormPayrollPreview({
         </div>
       ) : (
         <>
+          {preview.missingTables.length > 0 && (
+            <p className="rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs">
+              Missing statutory table(s): {preview.missingTables.join(", ")} — those
+              deductions are simply absent from this preview.
+            </p>
+          )}
+
           <div className="flex flex-wrap items-center gap-2 text-xs">
             <Badge variant="secondary">
               {preview.terms.payType} · {peso(Math.round(preview.terms.basicRate * 100))}

@@ -22,6 +22,16 @@ import {
 } from "./calendar";
 import { isInMonthlyRate, NORMAL_MINUTES_PER_DAY, priceDay } from "./premiums";
 import {
+    pagibigContributions,
+    philhealthContributions,
+    splitMonthlyAcrossCutoffs,
+    sssContributions,
+    type PagibigTable,
+    type PhilhealthTable,
+    type SssTable,
+} from "./statutory";
+import { withholdingCentavos, type Bracket } from "./tax";
+import {
     allowanceTotalOf,
     dailyRateCentavos,
     hourlyRateCentavos,
@@ -44,9 +54,10 @@ import type {
 } from "./types";
 
 /** Bumped when the engine's behaviour changes; recorded per run in P3. */
-export const ENGINE_STAGE = "P1-earnings";
+export const ENGINE_STAGE = "P2-statutory";
 
-export const STATUTORY_PENDING = "STATUTORY_PENDING";
+/** What is still missing before a payslip may be persisted (P5: loans, 13th month). */
+export const PAYOUT_FEATURES_PENDING = "PAYOUT_FEATURES_PENDING";
 
 /** A semi-monthly period is half a month — the conversion for monthly amounts. */
 const PERIODS_PER_YEAR = 24;
@@ -64,8 +75,13 @@ export type ComputePayslipArgs = {
     profile: PayProfile;
     days: DayRecord[];
     holidayTable: HolidayRule[];
-    /** Only the de minimis ceilings are read in P1; P2 adds sss/philhealth/pagibig/tax. */
-    tables: { deminimis?: DeminimisTable };
+    tables: {
+        deminimis?: DeminimisTable;
+        sss?: SssTable;
+        philhealth?: PhilhealthTable;
+        pagibig?: PagibigTable;
+        tax?: { annualBrackets: Bracket[] };
+    };
     adjustments?: Adjustment[];
     ytd?: {
         taxable: Money;
@@ -78,6 +94,8 @@ export type ComputePayslipArgs = {
         endDate: number;
         payDate: number;
         isYearEnd: boolean;
+        /** 0 = first cutoff of the month, 1 = second (D3 residue rule). */
+        cutoffIndex?: 0 | 1;
     };
     /** Employment window, for proration. Defaults to the whole period. */
     employment?: { start?: number; end?: number };
@@ -246,7 +264,142 @@ export function computePayslip(args: ComputePayslipArgs): PayResult {
         });
     }
 
-    // ── 5. Memo lines: the payslip must state how the daily rate was derived
+    // ── 5. Statutory contributions (P2.1, D3) ──────────────────────────────
+    // The base is a MONTHLY figure: the period's earnings × 2, computed on the
+    // basis the org chose (D-PILOT-3), then each contribution is split across the
+    // two cutoffs. Employer shares are `employer_cost` lines — never a deduction,
+    // because a payslip that shows the employer share as a deduction is the most
+    // common employee complaint and it is a presentation bug with legal weight.
+    const earningLines = lines.filter((line) => line.kind === "earning");
+    const WAGE_CODES = new Set(["BASIC", "RH", "SH", "RD", "RH_UNWORKED"]);
+    const wageCentavos = earningLines
+        .filter((line) => WAGE_CODES.has(line.code))
+        .reduce((sum, line) => sum + line.amount, 0);
+    const grossEarnings = earningLines.reduce((sum, line) => sum + line.amount, 0);
+    const grossTaxableCentavos = earningLines
+        .filter((line) => line.taxable)
+        .reduce((sum, line) => sum + line.amount, 0);
+    const periodBase =
+        profile.statutoryBasis === "basic"
+            ? wageCentavos
+            : profile.statutoryBasis === "gross_taxable"
+              ? grossTaxableCentavos
+              : grossEarnings;
+    const monthlyBase = periodBase * 2;
+    const cutoffIndex = period.cutoffIndex ?? 0;
+
+    if (args.tables.sss) {
+        const sss = sssContributions(monthlyBase, args.tables.sss);
+        const employee = splitMonthlyAcrossCutoffs(sss.employeeCentavos, cutoffIndex);
+        const employer = splitMonthlyAcrossCutoffs(sss.employerCentavos, cutoffIndex);
+        if (employee > 0) {
+            lines.push({
+                kind: "deduction",
+                code: "SSS",
+                description: `SSS contribution (MSC ${sss.mscPesos.toFixed(2)})`,
+                amount: employee,
+                taxable: false,
+            });
+        }
+        if (employer > 0) {
+            lines.push({
+                kind: "employer_cost",
+                code: "SSS_ER",
+                description: `SSS employer share (MSC ${sss.mscPesos.toFixed(2)})`,
+                amount: employer,
+                taxable: false,
+            });
+        }
+        // EC is employer-only and flat; it is a cost, never a deduction.
+        const ec = splitMonthlyAcrossCutoffs(sss.ecCentavos, cutoffIndex);
+        if (ec > 0) {
+            lines.push({
+                kind: "employer_cost",
+                code: "EC",
+                description: "Employees' Compensation (employer only)",
+                amount: ec,
+                taxable: false,
+            });
+        }
+        if (sss.mpfMscPesos > 0) {
+            notes.push(
+                `SSS: MSC ${sss.mscPesos.toFixed(2)} splits into ${sss.regularMscPesos.toFixed(2)} Regular SS and ${sss.mpfMscPesos.toFixed(2)} MPF/MySSS Pension Booster at the same rates (Circular 2024-006).`,
+            );
+        }
+    }
+
+    if (args.tables.philhealth) {
+        const phic = philhealthContributions(monthlyBase, args.tables.philhealth);
+        const employee = splitMonthlyAcrossCutoffs(phic.employeeCentavos, cutoffIndex);
+        const employer = splitMonthlyAcrossCutoffs(phic.employerCentavos, cutoffIndex);
+        if (employee > 0) {
+            lines.push({
+                kind: "deduction",
+                code: "PHIC",
+                description: `PhilHealth premium (base ${phic.basePesos.toFixed(2)})`,
+                amount: employee,
+                taxable: false,
+            });
+        }
+        if (employer > 0) {
+            lines.push({
+                kind: "employer_cost",
+                code: "PHIC_ER",
+                description: "PhilHealth employer share",
+                amount: employer,
+                taxable: false,
+            });
+        }
+    }
+
+    if (args.tables.pagibig) {
+        const hdmf = pagibigContributions(monthlyBase, args.tables.pagibig);
+        const employee = splitMonthlyAcrossCutoffs(hdmf.employeeCentavos, cutoffIndex);
+        const employer = splitMonthlyAcrossCutoffs(hdmf.employerCentavos, cutoffIndex);
+        if (employee > 0) {
+            lines.push({
+                kind: "deduction",
+                code: "HDMF",
+                description: `Pag-IBIG contribution (base ${hdmf.basePesos.toFixed(2)})`,
+                amount: employee,
+                taxable: false,
+            });
+        }
+        if (employer > 0) {
+            lines.push({
+                kind: "employer_cost",
+                code: "HDMF_ER",
+                description: "Pag-IBIG employer share",
+                amount: employer,
+                taxable: false,
+            });
+        }
+    }
+
+    // ── 6. Withholding tax for THIS cutoff (D4) ────────────────────────────
+    // Contributions are not deductible against compensation income under TRAIN, so
+    // the base is gross taxable as computed above — not gross less contributions.
+    if (args.tables.tax) {
+        const tax = withholdingCentavos(
+            grossTaxableCentavos,
+            args.tables.tax.annualBrackets,
+        );
+        if (tax > 0) {
+            lines.push({
+                kind: "deduction",
+                code: "TAX",
+                description: "Withholding tax on compensation",
+                amount: tax,
+                taxable: false,
+            });
+        }
+    } else {
+        notes.push(
+            "No withholding-tax table was supplied, so no tax was computed for this cutoff.",
+        );
+    }
+
+    // ── 7. Memo lines: the payslip must state how the daily rate was derived
     // (D7) and which statutory basis it will use (D-PILOT-3). ──────────────
     lines.push({
         kind: "memo",
@@ -274,10 +427,10 @@ export function computePayslip(args: ComputePayslipArgs): PayResult {
         pricedDays: pricedDayCount,
         absentDays: absentMinutes / NORMAL_MINUTES_PER_DAY,
         blocked: {
-            code: STATUTORY_PENDING,
+            code: PAYOUT_FEATURES_PENDING,
             reason:
-                `Engine stage ${ENGINE_STAGE}: earnings are computed, but statutory ` +
-                "contributions, withholding tax, loans and 13th month are P2/P5. The net " +
+                `Engine stage ${ENGINE_STAGE}: earnings, statutory contributions and ` +
+                "withholding tax are computed, but loans and 13th month are P5. The net " +
                 "below is NOT a payable amount and this payslip must not be persisted.",
         },
     };

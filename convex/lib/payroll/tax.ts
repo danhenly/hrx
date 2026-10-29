@@ -128,6 +128,55 @@ export function semiMonthlyTaxPesos(
     return taxFor(taxableCutoffPesos, semiMonthlyBrackets(annualBrackets));
 }
 
+/**
+ * Withholding for one cutoff, from the annual brackets (D4).
+ *
+ * The semi-monthly table is the annual table ÷ 24, so this is the per-run figure the
+ * 1601-C is built from; the December run then annualises against the real register.
+ */
+export function withholdingCentavos(
+    grossTaxableCutoffCentavos: Money,
+    annualBrackets: Bracket[],
+): Money {
+    return roundHalfUp(
+        semiMonthlyTaxPesos(grossTaxableCutoffCentavos / 100, annualBrackets) * 100,
+    );
+}
+
+export type Annualisation = {
+    annualTaxableCentavos: Money;
+    /** Tax due on the year's taxable compensation, from the annual brackets. */
+    annualTaxCentavos: Money;
+    /** What was actually withheld across the year, including this period. */
+    withheldCentavos: Money;
+    /** Positive = still to collect in the December run; negative = over-withheld. */
+    trueUpCentavos: Money;
+};
+
+/**
+ * Annual true-up (D4). One function feeds both the December adjustment and the 2316,
+ * which is the only way those two can never disagree.
+ */
+export function annualise(args: {
+    ytdTaxableCentavos: Money;
+    ytdWithheldCentavos: Money;
+    periodTaxableCentavos: Money;
+    periodWithheldCentavos: Money;
+    annualBrackets: Bracket[];
+}): Annualisation {
+    const annualTaxable = args.ytdTaxableCentavos + args.periodTaxableCentavos;
+    const withheld = args.ytdWithheldCentavos + args.periodWithheldCentavos;
+    const annualTax = roundHalfUp(
+        annualTaxPesos(annualTaxable / 100, args.annualBrackets) * 100,
+    );
+    return {
+        annualTaxableCentavos: annualTaxable,
+        annualTaxCentavos: annualTax,
+        withheldCentavos: withheld,
+        trueUpCentavos: annualTax - withheld,
+    };
+}
+
 /** Convenience for callers holding centavos: gross taxable Money → tax Money. */
 export function semiMonthlyTaxCentavos(
     taxableCutoffCentavos: Money,

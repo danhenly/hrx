@@ -3,7 +3,14 @@ import { query } from "../_generated/server";
 import type { QueryCtx } from "../_generated/server";
 import type { Id } from "../_generated/dataModel";
 import { requireAuth, requireMembership } from "../helpers";
+import { dateKeyOf } from "../lib/payroll/calendar";
 import { resolvePayTerms } from "../lib/payroll/rates";
+import type { Bracket } from "../lib/payroll/tax";
+import type {
+    PagibigTable,
+    PhilhealthTable,
+    SssTable,
+} from "../lib/payroll/statutory";
 import { computePayslip } from "../lib/payroll/engine";
 import type {
     Adjustment,
@@ -29,7 +36,7 @@ import type {
 /** The statutory table of one kind that is in force at an instant. */
 async function tableInForce(
     ctx: QueryCtx,
-    kind: "deminimis" | "holiday",
+    kind: "deminimis" | "holiday" | "sss" | "philhealth" | "pagibig" | "tax",
     at: number,
 ) {
     const rows = await ctx.db
@@ -170,6 +177,23 @@ async function buildPreview(
             ? ((holidayRow.payload as { days?: HolidayRule[] }).days ?? [])
             : [];
         const deminimisRow = await tableInForce(ctx, "deminimis", period.endDate);
+        const [sssRow, philhealthRow, pagibigRow, taxRow] = await Promise.all([
+            tableInForce(ctx, "sss", period.endDate),
+            tableInForce(ctx, "philhealth", period.endDate),
+            tableInForce(ctx, "pagibig", period.endDate),
+            tableInForce(ctx, "tax", period.endDate),
+        ]);
+        const missingTables = [
+            !sssRow ? "sss" : null,
+            !philhealthRow ? "philhealth" : null,
+            !pagibigRow ? "pagibig" : null,
+            !taxRow ? "tax" : null,
+        ].filter((kind): kind is string => kind !== null);
+
+        // Which half of the month this period is (D3's residue rule). A period that
+        // starts on or before the 15th is the first cutoff, otherwise the second.
+        const startDay = Number(dateKeyOf(period.startDate).slice(8, 10));
+        const cutoffIndex: 0 | 1 = startDay <= 15 ? 0 : 1;
 
         const adjustmentRows = await ctx.db
             .query("adjustments")
@@ -196,6 +220,10 @@ async function buildPreview(
             holidayTable: holidays,
             tables: {
                 deminimis: (deminimisRow?.payload as DeminimisTable) ?? undefined,
+                sss: (sssRow?.payload as SssTable) ?? undefined,
+                philhealth: (philhealthRow?.payload as PhilhealthTable) ?? undefined,
+                pagibig: (pagibigRow?.payload as PagibigTable) ?? undefined,
+                tax: (taxRow?.payload as { annualBrackets: Bracket[] }) ?? undefined,
             },
             adjustments,
             period: {
@@ -203,6 +231,7 @@ async function buildPreview(
                 endDate: period.endDate,
                 payDate: period.payDate,
                 isYearEnd: false,
+                cutoffIndex,
             },
             employment: {
                 start: employee.hireDate,
@@ -214,6 +243,9 @@ async function buildPreview(
             status: "computed" as const,
             period,
             positionRow: inForce,
+            cutoffIndex,
+            /** Statutory tables that were absent — their lines are simply missing. */
+            missingTables,
             terms: { ...resolved.terms, allowances },
             dayCount: days.length,
             /** Days in the period that were deliberately NOT priced, with why. */

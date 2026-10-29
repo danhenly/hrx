@@ -20,6 +20,7 @@ import type * as lib_payroll_calendar from "../lib/payroll/calendar.js";
 import type * as lib_payroll_engine from "../lib/payroll/engine.js";
 import type * as lib_payroll_premiums from "../lib/payroll/premiums.js";
 import type * as lib_payroll_rates from "../lib/payroll/rates.js";
+import type * as lib_payroll_statutory from "../lib/payroll/statutory.js";
 import type * as lib_payroll_tax from "../lib/payroll/tax.js";
 import type * as lib_payroll_types from "../lib/payroll/types.js";
 import type * as lib_week from "../lib/week.js";
@@ -56,6 +57,7 @@ declare const fullApi: ApiFromModules<{
   "lib/payroll/engine": typeof lib_payroll_engine;
   "lib/payroll/premiums": typeof lib_payroll_premiums;
   "lib/payroll/rates": typeof lib_payroll_rates;
+  "lib/payroll/statutory": typeof lib_payroll_statutory;
   "lib/payroll/tax": typeof lib_payroll_tax;
   "lib/payroll/types": typeof lib_payroll_types;
   "lib/week": typeof lib_week;

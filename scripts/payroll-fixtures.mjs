@@ -28,12 +28,13 @@ const libDir = join(root, "convex", "lib", "payroll");
 const fixturesDir = join(libDir, "__fixtures__");
 
 const load = (file) => import(pathToFileURL(join(libDir, file)).href);
-const [rates, calendar, tax, engine, premiums] = await Promise.all([
+const [rates, calendar, tax, engine, premiums, statutory] = await Promise.all([
     load("rates.ts"),
     load("calendar.ts"),
     load("tax.ts"),
     load("engine.ts"),
     load("premiums.ts"),
+    load("statutory.ts"),
 ]);
 
 /** The holiday set the engine fixtures price against (a slice of DOLE LA 12-25). */
@@ -193,7 +194,7 @@ const handlers = {
         return { minutes: premiums.nightMinutes(intervalsOn(anchor, intervals)) };
     },
 
-    computePayslip({ terms, period, entries, deminimis, employmentStart, employmentEnd }) {
+    computePayslip({ terms, period, entries, deminimis, tables, cutoffIndex, employmentStart, employmentEnd }) {
         const startDate = calendar.msOfDateKey(period.start);
         const endDate = calendar.msOfDateKey(period.end);
         const days = (entries ?? []).map((entry) => {
@@ -212,9 +213,15 @@ const handlers = {
             profile: terms,
             days,
             holidayTable: FIXTURE_HOLIDAYS,
-            tables: { deminimis },
+            tables: { deminimis, ...(tables ?? {}) },
             adjustments: [],
-            period: { startDate, endDate, payDate: endDate, isYearEnd: false },
+            period: {
+                startDate,
+                endDate,
+                payDate: endDate,
+                isYearEnd: false,
+                cutoffIndex: cutoffIndex === 1 ? 1 : 0,
+            },
             employment: {
                 start: employmentStart ? calendar.msOfDateKey(employmentStart) : undefined,
                 end: employmentEnd ? calendar.msOfDateKey(employmentEnd) : undefined,
@@ -243,6 +250,69 @@ const handlers = {
             absentDays: Number((result.absentDays ?? 0).toFixed(4)),
             blocked: result.blocked?.code ?? null,
             lines: result.lines.length,
+        };
+    },
+
+    msc({ basePesos, table }) {
+        return { msc: statutory.monthlySalaryCredit(basePesos, table) };
+    },
+
+    sss({ baseCentavos, table }) {
+        const result = statutory.sssContributions(baseCentavos, table);
+        return {
+            msc: result.mscPesos,
+            mpfMsc: result.mpfMscPesos,
+            employee: result.employeeCentavos,
+            employer: result.employerCentavos,
+            ec: result.ecCentavos,
+        };
+    },
+
+    philhealth({ baseCentavos, table }) {
+        const result = statutory.philhealthContributions(baseCentavos, table);
+        return {
+            base: result.basePesos,
+            employee: result.employeeCentavos,
+            employer: result.employerCentavos,
+        };
+    },
+
+    pagibig({ baseCentavos, table }) {
+        const result = statutory.pagibigContributions(baseCentavos, table);
+        return {
+            base: result.basePesos,
+            employee: result.employeeCentavos,
+            employer: result.employerCentavos,
+        };
+    },
+
+    splitCutoff({ monthlyCentavos, cutoffIndex }) {
+        return {
+            centavos: statutory.splitMonthlyAcrossCutoffs(
+                monthlyCentavos,
+                cutoffIndex === 1 ? 1 : 0,
+            ),
+        };
+    },
+
+    withholding({ taxableCentavos, table }) {
+        return {
+            centavos: tax.withholdingCentavos(taxableCentavos, table.annualBrackets),
+        };
+    },
+
+    annualise({ ytdTaxableCentavos, ytdWithheldCentavos, periodTaxableCentavos, periodWithheldCentavos, table }) {
+        const result = tax.annualise({
+            ytdTaxableCentavos,
+            ytdWithheldCentavos,
+            periodTaxableCentavos,
+            periodWithheldCentavos,
+            annualBrackets: table.annualBrackets,
+        });
+        return {
+            annualTax: result.annualTaxCentavos,
+            withheld: result.withheldCentavos,
+            trueUp: result.trueUpCentavos,
         };
     },
 
@@ -310,7 +380,7 @@ function runCase(file, fixture, testCase) {
     console.log(`  ok   ${testCase.name}`);
 }
 
-for (const file of ["rates.json", "calendar.json", "premiums.json"]) {
+for (const file of ["rates.json", "calendar.json", "premiums.json", "statutory.json"]) {
     const fixture = JSON.parse(readFileSync(join(fixturesDir, file), "utf8"));
     console.log(`\n${file} — ${fixture.description}`);
     for (const testCase of fixture.cases) runCase(file, fixture, testCase);
