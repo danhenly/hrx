@@ -44,6 +44,12 @@ export default function PayrollPage() {
           >
             Readiness check
           </a>
+          <a
+            className="text-sm underline underline-offset-4"
+            href="/dashboard/payroll/opening-balances"
+          >
+            Opening balances
+          </a>
         </div>
         {orgId ? (
           <PayrollRegister orgId={orgId} />

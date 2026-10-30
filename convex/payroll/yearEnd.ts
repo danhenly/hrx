@@ -6,6 +6,7 @@ import { logAudit } from "../audit";
 import { requireAdmin, requireAuth, requireMembership } from "../helpers";
 import type { Bracket } from "../lib/payroll/tax";
 import { sha256Hex } from "../lib/payroll/sha256";
+import { mergeOpeningBalance } from "../lib/payroll/openingBalances";
 import {
     alphalistPreflight,
     alphalistTotals,
@@ -32,7 +33,10 @@ function manilaYear(ms: number): number {
     );
 }
 
-async function taxTable(ctx: QueryCtx | MutationCtx, year: number): Promise<{ brackets: Bracket[]; version: string }> {
+async function taxTable(
+    ctx: QueryCtx | MutationCtx,
+    year: number,
+): Promise<{ brackets: Bracket[]; version: string; ceilingCentavos: number }> {
     const rows = await ctx.db.query("statutoryTables").withIndex("by_kind_effective", (q) => q.eq("kind", "tax")).collect();
     if (rows.length === 0) throw new ConvexError("No tax table is seeded — seed the statutory tables first");
     // The table in force at the END of the year is the one that governs it.
@@ -41,11 +45,35 @@ async function taxTable(ctx: QueryCtx | MutationCtx, year: number): Promise<{ br
         .filter((row) => row.effectiveFrom <= endOfYear)
         .sort((a, b) => a.effectiveFrom - b.effectiveFrom);
     const chosen = applicable.at(-1) ?? rows[0];
-    const payload = chosen.payload as { annualBrackets?: Bracket[] };
+    const payload = chosen.payload as {
+        annualBrackets?: Bracket[];
+        thirteenthMonthExemptCeiling?: number;
+    };
     if (!payload?.annualBrackets) throw new ConvexError("The tax table has no annual brackets");
     const date = new Intl.DateTimeFormat("en-CA", { timeZone: MANILA, year: "numeric", month: "2-digit", day: "2-digit" })
         .format(new Date(chosen.effectiveFrom));
-    return { brackets: payload.annualBrackets, version: `tax@${date}` };
+    return {
+        brackets: payload.annualBrackets,
+        version: `tax@${date}`,
+        ceilingCentavos: Math.round((payload.thirteenthMonthExemptCeiling ?? 90000) * 100),
+    };
+}
+
+/** A stored opening balance in centavos, for the pure merge. */
+function toOpeningBalanceFromDoc(doc: {
+    employeeId: unknown;
+    grossPesos: number;
+    taxablePesos: number;
+    taxWithheldPesos: number;
+    thirteenthMonthPesos: number;
+}) {
+    return {
+        employeeId: String(doc.employeeId),
+        grossCentavos: Math.round(doc.grossPesos * 100),
+        taxableCentavos: Math.round(doc.taxablePesos * 100),
+        taxWithheldCentavos: Math.round(doc.taxWithheldPesos * 100),
+        thirteenthMonthCentavos: Math.round(doc.thirteenthMonthPesos * 100),
+    };
 }
 
 export async function loadYearEnd(
@@ -130,6 +158,34 @@ export async function loadYearEnd(
             withheldCentavos: acc.withheld,
             thirteenthMonthCentavos: acc.thirteenth,
         });
+    }
+
+    // P11: fold in the year-to-date the old system already paid, per employee.
+    const openingRows = await ctx.db
+        .query("payrollOpeningBalances")
+        .withIndex("by_org_year", (q) => q.eq("orgId", orgId).eq("year", year))
+        .collect();
+    const eligibleEmployees = new Set(rows.map((row) => row.employeeId));
+    for (const opening of openingRows) {
+        const key = String(opening.employeeId);
+        if (!eligibleEmployees.has(key)) continue;
+        const row = rows.find((candidate) => candidate.employeeId === key);
+        if (!row) continue;
+        const merged = mergeOpeningBalance({
+            grossCentavos: row.grossCentavos,
+            nonTaxableCentavos: row.nonTaxableCentavos,
+            taxableCentavos: row.grossCentavos - row.nonTaxableCentavos,
+            withheldCentavos: row.withheldCentavos,
+            opening: toOpeningBalanceFromDoc(opening),
+            exemptCeilingCentavos: table.ceilingCentavos,
+        });
+        row.grossCentavos = merged.grossCentavos;
+        row.nonTaxableCentavos = merged.nonTaxableCentavos;
+        row.withheldCentavos = merged.withheldCentavos;
+        row.thirteenthMonthCentavos += Math.round(opening.thirteenthMonthPesos * 100);
+        // The old system's own taxable figure wins: its non-taxable items are not all
+        // 13th month, so gross − non-taxable cannot reconstruct it.
+        row.openingTaxableCentavos = merged.taxableCentavos;
     }
 
     const certificates = build2316(rows, table.brackets);
