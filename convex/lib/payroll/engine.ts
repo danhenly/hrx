@@ -416,8 +416,10 @@ export function computePayslip(args: ComputePayslipArgs): PayResult {
     const monthlyBase = periodBase * 2;
     const cutoffIndex = period.cutoffIndex ?? 0;
 
+    let mscPesos: number | undefined;
     if (args.tables.sss) {
         const sss = sssContributions(monthlyBase, args.tables.sss);
+        mscPesos = sss.mscPesos;
         const employee = splitMonthlyAcrossCutoffs(sss.employeeCentavos, cutoffIndex);
         const employer = splitMonthlyAcrossCutoffs(sss.employerCentavos, cutoffIndex);
         if (employee > 0) {
@@ -596,6 +598,7 @@ export function computePayslip(args: ComputePayslipArgs): PayResult {
         thirteenthMonthAccrualCentavos: accrual,
         thirteenthMonthPayoutCentavos: thirteenthPayoutCentavos,
         loanPayments,
+        mscPesos,
         // Nothing is missing from the payslip as of P5 — the only blocker left is a
         // loan schedule that does not fit (D9). December annualisation (P7) changes
         // the TAX line of a year-end run, which is noted rather than blocked.

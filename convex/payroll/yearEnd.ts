@@ -167,8 +167,8 @@ export async function loadYearEnd(
         carryForward: { accruedCentavos: accrued, paidCentavos: paid, ...carry },
         runCount: countedRuns.length,
         registeredName: organisation?.name ?? "",
-        // HRX stores no company TIN (D19/A10) — the filing tool supplies the header.
-        tin: "",
+        // P9 follow-up: the org carries its own TIN now (D19/A10 retired).
+        tin: organisation?.tin ?? "",
     };
 }
 

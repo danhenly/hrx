@@ -115,6 +115,13 @@ export async function loadGovForms(
         })),
     );
 
+    // The MSC is stored on each payslip (P9 follow-up), so the R-3 can report it —
+    // and with it the MPF/WISP split is no longer an omission (D19/A9 retired).
+    const mscByEmployee: Record<string, number> = {};
+    for (const slip of payslips) {
+        if (slip.msc !== undefined) mscByEmployee[String(slip.employeeId)] = slip.msc;
+    }
+
     const sssRows: GovRow[] = [];
     const phRows: GovRow[] = [];
     const hdmfRows: GovRow[] = [];
@@ -169,7 +176,12 @@ export async function loadGovForms(
 
     const label = periodLabel(period);
     const forms: GovForm[] = [
-        buildR3({ rows: sssRows, tableVersion: sssVersion, periodLabel: label }),
+        buildR3({
+            rows: sssRows,
+            tableVersion: sssVersion,
+            periodLabel: label,
+            ...(Object.keys(mscByEmployee).length > 0 ? { mscByEmployee } : {}),
+        }),
         buildRf1({ rows: phRows, tableVersion: phVersion, periodLabel: label }),
         buildMcrf({ rows: hdmfRows, tableVersion: hdmfVersion, periodLabel: label }),
         build1601C({ rows: taxRows, tableVersion: taxVersion, periodLabel: label }),

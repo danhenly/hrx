@@ -134,6 +134,12 @@ export type PayResult = {
     pricedDays?: number;
     /** Days deducted as unpaid absence or undertime (monthly-paid). */
     absentDays?: number;
+    /**
+     * Monthly salary credit the SSS contribution was computed on, in pesos (P6).
+     * Stored so the R-3 can report the MSC and the MPF/WISP split after the fact
+     * instead of re-deriving them from a table that may have changed (D19/A9).
+     */
+    mscPesos?: number;
     /** 13th month accrued by this run (D5), centavos. */
     thirteenthMonthAccrualCentavos?: number;
     /** 13th month released by this run (December payout or separation), centavos. */

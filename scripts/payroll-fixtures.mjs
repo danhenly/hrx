@@ -478,6 +478,7 @@ const handlers = {
             thirteenthPayout: result.thirteenthMonthPayoutCentavos ?? 0,
             loanPayments: (result.loanPayments ?? []).length,
             silPaid: result.lines.some((line) => line.code === "SIL_CONVERSION"),
+            mscPesos: result.mscPesos ?? 0,
             gross: result.gross,
             totalDeductions: result.totalDeductions,
             net: result.net,
