@@ -82,7 +82,9 @@ export default defineSchema({
         country: v.optional(v.string()),
         createdBy: v.id("users"),
         /** Absent on every pre-P0 org — resolvePayTerms() supplies the defaults. */
-        payrollSettings: v.optional(payrollSettingsValidator),
+        /** Company TIN for filing headers (P7, D19/A10). */
+    tin: v.optional(v.string()),
+    payrollSettings: v.optional(payrollSettingsValidator),
     }),
 
     /**
@@ -376,6 +378,8 @@ export default defineSchema({
         employerCost: v.number(),
         daysWorked: v.number(),
         minutesWorked: v.number(),
+        /** MSC the SSS contribution was computed on, in pesos (P6, D19/A9). */
+        msc: v.optional(v.number()),
     })
         .index("by_run", ["runId"])
         .index("by_org_employee", ["orgId", "employeeId"]),

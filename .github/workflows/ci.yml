@@ -50,6 +50,12 @@ jobs:
       - name: Lint
         run: pnpm exec biome lint .
 
+      # The payroll rules are pure modules with fixtures instead of a test framework
+      # (repo has none). Running them here makes every payroll PR prove itself rather
+      # than trusting whoever ran the script by hand.
+      - name: Payroll fixtures
+        run: node --no-warnings --experimental-strip-types scripts/payroll-fixtures.mjs
+
       - name: Convex generated code is fresh
         env:
           CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}

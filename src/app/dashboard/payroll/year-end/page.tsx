@@ -12,6 +12,7 @@ import {
 } from "@/components/content/section";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -45,6 +46,12 @@ export default function YearEndPage() {
     api.payroll.yearEnd.previewYearEnd,
     orgId && year ? { orgId, year } : "skip",
   );
+  const organisation = useQuery(
+    api.organizations.getOrg,
+    orgId ? { orgId } : "skip",
+  );
+  const setOrgTin = useMutation(api.organizations.setTin);
+  const [tin, setTinValue] = useState("");
   const generate = useMutation(api.payroll.yearEnd.generateAlphalist);
   const close = useMutation(api.payroll.yearEnd.closeYear);
   const [isPending, startTransition] = useTransition();
@@ -67,6 +74,51 @@ export default function YearEndPage() {
             carried.
           </SectionDescription>
         </SectionHeader>
+
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <label
+            className="text-muted-foreground text-sm"
+            htmlFor="company-tin"
+          >
+            Company TIN
+          </label>
+          <Input
+            id="company-tin"
+            className="w-56"
+            placeholder={organisation?.tin || "000-000-000-00000"}
+            value={tin}
+            onChange={(event) => setTinValue(event.target.value)}
+          />
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={isPending || tin.trim().length === 0}
+            onClick={() =>
+              startTransition(async () => {
+                try {
+                  const result = await setOrgTin({ orgId, tin });
+                  setTinValue("");
+                  toast.success(`TIN saved as ${result.tin}`);
+                } catch (error) {
+                  toast.error(
+                    (error as Error).message ?? "Could not save the TIN",
+                  );
+                }
+              })
+            }
+          >
+            Save TIN
+          </Button>
+          {organisation?.tin ? (
+            <span className="text-muted-foreground text-xs">
+              Filing header uses {organisation.tin}
+            </span>
+          ) : (
+            <span className="text-muted-foreground text-xs">
+              Every return will ship with a blank TIN header until this is set.
+            </span>
+          )}
+        </div>
 
         <div className="mb-4 flex flex-wrap items-center gap-2">
           {(years ?? []).map((entry) => (

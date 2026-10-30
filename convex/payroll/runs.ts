@@ -285,6 +285,7 @@ for (const employee of todo) {
                 employerCost: fromCentavos(result.employerCost),
                 daysWorked: context.days.filter((day) => day.totalMinutes > 0).length,
                 minutesWorked: Math.round((result.hoursWorked ?? 0) * 60),
+                msc: result.mscPesos,
             });
 
             for (const line of result.lines) {
