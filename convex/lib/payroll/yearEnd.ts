@@ -20,6 +20,12 @@ export interface YearTotals {
     withheldCentavos: Money;
     /** 13th month + other benefits released during the year. */
     thirteenthMonthCentavos: Money;
+    /**
+     * Taxable compensation carried in from before HRX (P11). Set only when an opening
+     * balance exists, because it cannot be inferred from gross − non-taxable: the old
+     * system's non-taxable items are not all 13th month.
+     */
+    openingTaxableCentavos?: Money;
 }
 
 export interface Tax2316Row extends YearTotals {
@@ -34,6 +40,9 @@ const roundHalfUp = (value: number) => Math.round(value);
 
 /** Taxable compensation is gross less everything the register marked non-taxable. */
 export function taxableOf(totals: YearTotals): Money {
+    if (totals.openingTaxableCentavos !== undefined) {
+        return Math.max(0, totals.openingTaxableCentavos);
+    }
     return Math.max(0, totals.grossCentavos - totals.nonTaxableCentavos);
 }
 

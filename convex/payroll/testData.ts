@@ -754,6 +754,13 @@ export const teardownPayrollDataset = internalMutation({
         counts.leaveRequests = leaveRequests.length;
         await deleteAll(ctx, leaveRequests.map((row) => row._id));
 
+        const openingBalances = await ctx.db
+            .query("payrollOpeningBalances")
+            .withIndex("by_org", (q) => q.eq("orgId", orgId))
+            .collect();
+        counts.payrollOpeningBalances = openingBalances.length;
+        await deleteAll(ctx, openingBalances.map((row) => row._id));
+
         const leaveLedger = await ctx.db
             .query("leaveLedger")
             .withIndex("by_org", (q) => q.eq("orgId", orgId))
@@ -871,6 +878,10 @@ export const verifyEmpty = internalMutation({
             .query("payrollYearEnds")
             .withIndex("by_org", (q) => q.eq("orgId", orgId))
             .collect();
+        const openingBalances = await ctx.db
+            .query("payrollOpeningBalances")
+            .withIndex("by_org", (q) => q.eq("orgId", orgId))
+            .collect();
         const leaveRequests = await ctx.db
             .query("leaveRequests")
             .withIndex("by_org", (q) => q.eq("orgId", orgId))
@@ -935,6 +946,7 @@ export const verifyEmpty = internalMutation({
             leaveTypes: leaveTypes.length,
             leaveLedger: leaveLedger.length,
             leaveRequests: leaveRequests.length,
+            payrollOpeningBalances: openingBalances.length,
             auditLogs: auditLogs.length,
             members: members.length,
             organizations,

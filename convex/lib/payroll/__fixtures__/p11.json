@@ -1,0 +1,132 @@
+{
+  "description": "P11 opening balances: the year-to-date the old system paid must reach the 2316, and a bad row must be refused",
+  "cases": [
+    {
+      "name": "opening gross, taxable and withheld are added to the register",
+      "kind": "opening",
+      "input": {
+        "op": "merge",
+        "email": "a@x.ph",
+        "gross": 120000,
+        "taxable": 100000,
+        "taxWithheld": 8000,
+        "thirteenthMonth": 0,
+        "registerGross": 5000000,
+        "registerNonTaxable": 0,
+        "registerTaxable": 5000000,
+        "registerWithheld": 40000
+      },
+      "expect": {
+        "gross": 17000000,
+        "taxable": 15000000,
+        "withheld": 840000
+      }
+    },
+    {
+      "name": "opening 13th month consumes the ceiling first, and the excess becomes taxable",
+      "kind": "opening",
+      "input": {
+        "op": "merge",
+        "email": "a@x.ph",
+        "gross": 300000,
+        "taxable": 200000,
+        "taxWithheld": 0,
+        "thirteenthMonth": 100000,
+        "registerGross": 0,
+        "registerNonTaxable": 0,
+        "registerTaxable": 0,
+        "registerWithheld": 0,
+        "ceiling": 9000000
+      },
+      "expect": {
+        "openingExempt": 9000000,
+        "openingTaxable13": 1000000,
+        "nonTaxable": 9000000
+      }
+    },
+    {
+      "name": "a 13th month inside the ceiling is entirely exempt",
+      "kind": "opening",
+      "input": {
+        "op": "merge",
+        "email": "a@x.ph",
+        "gross": 200000,
+        "taxable": 200000,
+        "taxWithheld": 0,
+        "thirteenthMonth": 50000,
+        "registerGross": 0,
+        "registerNonTaxable": 0,
+        "registerTaxable": 0,
+        "registerWithheld": 0,
+        "ceiling": 9000000
+      },
+      "expect": {
+        "openingExempt": 5000000,
+        "openingTaxable13": 0
+      }
+    },
+    {
+      "name": "a negative amount is refused",
+      "kind": "opening",
+      "input": {
+        "op": "validate",
+        "email": "a@x.ph",
+        "gross": -1,
+        "taxable": 0,
+        "taxWithheld": 0,
+        "thirteenthMonth": 0
+      },
+      "expect": {
+        "ok": false,
+        "errors": 1
+      }
+    },
+    {
+      "name": "taxable above gross is refused",
+      "kind": "opening",
+      "input": {
+        "op": "validate",
+        "email": "a@x.ph",
+        "gross": 100,
+        "taxable": 200,
+        "taxWithheld": 0,
+        "thirteenthMonth": 0
+      },
+      "expect": {
+        "ok": false,
+        "errors": 1
+      }
+    },
+    {
+      "name": "a row with no identifier is refused",
+      "kind": "opening",
+      "input": {
+        "op": "validate",
+        "gross": 100,
+        "taxable": 100,
+        "taxWithheld": 0,
+        "thirteenthMonth": 0
+      },
+      "expect": {
+        "ok": false,
+        "errors": 1
+      }
+    },
+    {
+      "name": "a clean row validates",
+      "kind": "opening",
+      "input": {
+        "op": "validate",
+        "email": "a@x.ph",
+        "gross": 100,
+        "taxable": 80,
+        "taxWithheld": 5,
+        "thirteenthMonth": 10
+      },
+      "expect": {
+        "ok": true,
+        "errors": 0
+      }
+    }
+  ]
+}

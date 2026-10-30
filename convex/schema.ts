@@ -472,6 +472,30 @@ export default defineSchema({
         .index("by_org", ["orgId"]),
 
     /**
+     * Opening balances (P11) — the year-to-date figures paid before HRX took over.
+     *
+     * Without them a mid-year start produces a 2316 that omits every peso withheld
+     * before the pilot began, which looks plausible and is wrong for everyone.
+     */
+    payrollOpeningBalances: defineTable({
+        orgId: v.id("organizations"),
+        employeeId: v.id("employees"),
+        year: v.number(),
+        grossPesos: v.number(),
+        taxablePesos: v.number(),
+        taxWithheldPesos: v.number(),
+        thirteenthMonthPesos: v.number(),
+        /** Where the numbers came from (spreadsheet name, date, who imported). */
+        source: v.string(),
+        createdBy: v.id("users"),
+        createdAt: v.number(),
+        updatedAt: v.number(),
+    })
+        .index("by_org_year", ["orgId", "year"])
+        .index("by_org_employee_year", ["orgId", "employeeId", "year"])
+        .index("by_org", ["orgId"]),
+
+    /**
      * A closed year (P7). One row per org per year, written only when the alphalist
      * reconciles to the remittances — the §1.3 rejection is enforced here, not in a UI.
      */

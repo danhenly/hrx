@@ -36,7 +36,7 @@ const [bankFilesDoc, sha256Doc] = await Promise.all([
 const bankFiles = bankFilesDoc;
 const sha256 = sha256Doc;
 
-const [rates, calendar, tax, engine, premiums, statutory, thirteenth, govForms, loansLib, yearEndLib, leaveLib, readinessLib] = await Promise.all([
+const [rates, calendar, tax, engine, premiums, statutory, thirteenth, govForms, loansLib, yearEndLib, leaveLib, readinessLib, openingLib] = await Promise.all([
     load("rates.ts"),
     load("calendar.ts"),
     load("tax.ts"),
@@ -49,6 +49,7 @@ const [rates, calendar, tax, engine, premiums, statutory, thirteenth, govForms, 
     load("yearEnd.ts"),
     load("leave.ts"),
     load("readiness.ts"),
+    load("openingBalances.ts"),
 ]);
 
 /** The holiday set the engine fixtures price against (a slice of DOLE LA 12-25). */
@@ -93,6 +94,42 @@ const ms = (dateKey) => calendar.msOfDateKey(dateKey);
 
 /** Each handler returns the object that the fixture's `expect` is matched against. */
 const handlers = {
+
+    opening(input) {
+        const check = openingLib.validateOpeningRow({
+            email: input.email,
+            employeeId: input.employeeId,
+            gross: input.gross,
+            taxable: input.taxable,
+            taxWithheld: input.taxWithheld,
+            thirteenthMonth: input.thirteenthMonth,
+        });
+        if (input.op === "validate") {
+            return { ok: check.ok, errors: check.errors.length };
+        }
+        const merged = openingLib.mergeOpeningBalance({
+            grossCentavos: input.registerGross ?? 0,
+            nonTaxableCentavos: input.registerNonTaxable ?? 0,
+            taxableCentavos: input.registerTaxable ?? 0,
+            withheldCentavos: input.registerWithheld ?? 0,
+            opening: openingLib.toOpeningBalance("e1", {
+                gross: input.gross,
+                taxable: input.taxable,
+                taxWithheld: input.taxWithheld,
+                thirteenthMonth: input.thirteenthMonth,
+            }),
+            exemptCeilingCentavos: input.ceiling ?? 9000000,
+        });
+        return {
+            gross: merged.grossCentavos,
+            nonTaxable: merged.nonTaxableCentavos,
+            taxable: merged.taxableCentavos,
+            withheld: merged.withheldCentavos,
+            openingExempt: merged.openingExemptCentavos,
+            openingTaxable13: merged.openingTaxableThirteenthCentavos,
+            valid: check.ok,
+        };
+    },
 
     readiness(input) {
         const report = readinessLib.readinessReport(input.items);
@@ -685,7 +722,7 @@ function runCase(file, fixture, testCase) {
     console.log(`  ok   ${testCase.name}`);
 }
 
-for (const file of ["rates.json", "calendar.json", "premiums.json", "statutory.json", "artefacts.json", "p5.json", "p6.json", "p7.json", "p8.json", "p9.json"]) {
+for (const file of ["rates.json", "calendar.json", "premiums.json", "statutory.json", "artefacts.json", "p5.json", "p6.json", "p7.json", "p8.json", "p9.json", "p11.json"]) {
     const fixture = JSON.parse(readFileSync(join(fixturesDir, file), "utf8"));
     console.log(`\n${file} — ${fixture.description}`);
     for (const testCase of fixture.cases) runCase(file, fixture, testCase);
