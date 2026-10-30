@@ -1,0 +1,151 @@
+{
+  "description": "P12 departments normalise spellings (not meanings) and position history never shares a day",
+  "cases": [
+    {
+      "name": "case, padding and trailing punctuation collapse to one department",
+      "kind": "dept",
+      "input": {
+        "values": [
+          "MIS",
+          " mis ",
+          "MIS.",
+          "Mis"
+        ]
+      },
+      "expect": {
+        "count": 1,
+        "keys": "mis",
+        "renames": 2,
+        "firstCount": 4
+      }
+    },
+    {
+      "name": "the most common spelling wins the display name",
+      "kind": "dept",
+      "input": {
+        "values": [
+          "Engg",
+          "Engg",
+          "engg"
+        ]
+      },
+      "expect": {
+        "count": 1,
+        "displays": "Engg",
+        "renames": 1
+      }
+    },
+    {
+      "name": "different names are NOT merged \u2014 Engg and Engineering stay apart",
+      "kind": "dept",
+      "input": {
+        "values": [
+          "Engg",
+          "Engineering"
+        ]
+      },
+      "expect": {
+        "count": 2,
+        "displays": "Engg | Engineering",
+        "renames": 0
+      }
+    },
+    {
+      "name": "blank values never create a department",
+      "kind": "dept",
+      "input": {
+        "values": [
+          "",
+          "   ",
+          "MIS"
+        ]
+      },
+      "expect": {
+        "count": 1
+      }
+    },
+    {
+      "name": "a new record may start the day AFTER the previous one",
+      "kind": "posDates",
+      "input": {
+        "op": "spacing",
+        "effectiveDate": 1791993600000,
+        "previous": 1790784000000
+      },
+      "expect": {
+        "ok": true
+      }
+    },
+    {
+      "name": "the same day as the previous record is refused",
+      "kind": "posDates",
+      "input": {
+        "op": "spacing",
+        "effectiveDate": 1790784000000,
+        "previous": 1790784000000
+      },
+      "expectError": "at least one day after"
+    },
+    {
+      "name": "one day later is the earliest legal date, and closing lands on the day before",
+      "kind": "posDates",
+      "input": {
+        "op": "spacing",
+        "effectiveDate": 1790870400000,
+        "previous": 1790784000000
+      },
+      "expect": {
+        "ok": true
+      }
+    },
+    {
+      "name": "closing an old record lands the day before the new one",
+      "kind": "posDates",
+      "input": {
+        "op": "closing",
+        "effectiveDate": 1791993600000
+      },
+      "expect": {
+        "closing": 1791907200000
+      }
+    },
+    {
+      "name": "a backdated edit that lands on the next record's day is refused",
+      "kind": "posDates",
+      "input": {
+        "op": "spacing",
+        "effectiveDate": 1791993600000,
+        "next": 1791993600000
+      },
+      "expectError": "leave a day before the next position"
+    },
+    {
+      "name": "repair closes every non-final record on the day before the next",
+      "kind": "posDates",
+      "input": {
+        "op": "repair",
+        "rows": [
+          {
+            "id": "a",
+            "effectiveDate": 1790784000000,
+            "endDate": 1791993600000
+          },
+          {
+            "id": "b",
+            "effectiveDate": 1791993600000
+          },
+          {
+            "id": "c",
+            "effectiveDate": 1793203200000,
+            "endDate": 1793203200000
+          }
+        ]
+      },
+      "expect": {
+        "overlapBefore": true,
+        "overlapAfter": false,
+        "endDates": "1791907200000,1793116800000,none"
+      }
+    }
+  ]
+}

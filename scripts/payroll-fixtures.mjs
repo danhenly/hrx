@@ -29,6 +29,9 @@ const fixturesDir = join(libDir, "__fixtures__");
 
 const load = (file) => import(pathToFileURL(join(libDir, file)).href);
 const loadSrc = (file) => import(pathToFileURL(join(root, "src", "lib", file)).href);
+// Business rules that are not payroll (departments, position history) live directly
+// under convex/lib; the runner needs a second root to reach them.
+const loadLib = (file) => import(pathToFileURL(join(root, "convex", "lib", file)).href);
 const [bankFilesDoc, sha256Doc] = await Promise.all([
     load("bankFiles.ts"),
     load("sha256.ts"),
@@ -36,7 +39,7 @@ const [bankFilesDoc, sha256Doc] = await Promise.all([
 const bankFiles = bankFilesDoc;
 const sha256 = sha256Doc;
 
-const [rates, calendar, tax, engine, premiums, statutory, thirteenth, govForms, loansLib, yearEndLib, leaveLib, readinessLib, openingLib] = await Promise.all([
+const [rates, calendar, tax, engine, premiums, statutory, thirteenth, govForms, loansLib, yearEndLib, leaveLib, readinessLib, openingLib, depts, posDates] = await Promise.all([
     load("rates.ts"),
     load("calendar.ts"),
     load("tax.ts"),
@@ -50,6 +53,8 @@ const [rates, calendar, tax, engine, premiums, statutory, thirteenth, govForms, 
     load("leave.ts"),
     load("readiness.ts"),
     load("openingBalances.ts"),
+    loadLib("departments.ts"),
+    loadLib("positionHistory.ts"),
 ]);
 
 /** The holiday set the engine fixtures price against (a slice of DOLE LA 12-25). */
@@ -94,6 +99,43 @@ const ms = (dateKey) => calendar.msOfDateKey(dateKey);
 
 /** Each handler returns the object that the fixture's `expect` is matched against. */
 const handlers = {
+
+    dept(input) {
+        const plan = depts.planDepartments(input.values);
+        return {
+            count: plan.departments.length,
+            displays: plan.departments.map((d) => d.display).join(" | "),
+            keys: plan.departments.map((d) => d.key).join(" | "),
+            renames: plan.renames.length,
+            firstCount: plan.departments[0]?.count ?? 0,
+        };
+    },
+
+    posDates(input) {
+        if (input.op === "spacing") {
+            posDates.assertSpacing({
+                effectiveDate: input.effectiveDate,
+                previous: input.previous === undefined ? undefined : { effectiveDate: input.previous },
+                next: input.next === undefined ? undefined : { effectiveDate: input.next },
+            });
+            return { ok: true };
+        }
+        if (input.op === "repair") {
+            const plan = posDates.planRepair(input.rows);
+            return {
+                endDates: plan.map((row) => (row.endDate === undefined ? "none" : row.endDate)).join(","),
+                overlapBefore: posDates.hasOverlap(input.rows),
+                overlapAfter: posDates.hasOverlap(
+                    input.rows.map((row, index) => ({ ...row, endDate: plan[index].endDate })),
+                ),
+            };
+        }
+        return {
+            earliest: posDates.earliestEffectiveAfter(input.previous ?? 0),
+            closing: posDates.closingEndDate(input.effectiveDate ?? 0),
+            day: posDates.DAY_MS,
+        };
+    },
 
     opening(input) {
         const check = openingLib.validateOpeningRow({
@@ -722,7 +764,7 @@ function runCase(file, fixture, testCase) {
     console.log(`  ok   ${testCase.name}`);
 }
 
-for (const file of ["rates.json", "calendar.json", "premiums.json", "statutory.json", "artefacts.json", "p5.json", "p6.json", "p7.json", "p8.json", "p9.json", "p11.json"]) {
+for (const file of ["rates.json", "calendar.json", "premiums.json", "statutory.json", "artefacts.json", "p5.json", "p6.json", "p7.json", "p8.json", "p9.json", "p11.json", "p12.json"]) {
     const fixture = JSON.parse(readFileSync(join(fixturesDir, file), "utf8"));
     console.log(`\n${file} — ${fixture.description}`);
     for (const testCase of fixture.cases) runCase(file, fixture, testCase);
