@@ -32,8 +32,11 @@ export const preview = query({
             .withIndex("by_employee_effective", (q) => q.eq("employeeId", employeeId))
             .order("desc")
             .collect();
-        const openRow = history.find((row) => row.endDate !== undefined) ?? null;
-        const separationDate = openRow?.endDate;
+        // Only the LATEST row can carry a real separation date. Searching for "any row
+        // with an endDate" returns the previous row that an append auto-closed, so every
+        // employee with two positions would read as separated (P12 review).
+        const latestRow = history[0] ?? null;
+        const separationDate = latestRow?.endDate;
         if (separationDate === undefined) {
             return {
                 status: "not-separated" as const,
@@ -117,7 +120,8 @@ export const record = mutation({
             .withIndex("by_employee_effective", (q) => q.eq("employeeId", employeeId))
             .order("desc")
             .collect();
-        const separationDate = history.find((row) => row.endDate !== undefined)?.endDate;
+        // Latest row only — see the note on the preview query above.
+        const separationDate = history[0]?.endDate;
         if (separationDate === undefined) {
             throw new ConvexError("The employee has no separation date on position history");
         }
