@@ -145,6 +145,7 @@ export default function PositionsPage() {
               defaultValues={{
                 name: editPosition.name,
                 departmentId: editPosition.departmentId,
+                department: editPosition.department,
                 description: editPosition.description,
               }}
               onDone={() => setEditPosition(null)}

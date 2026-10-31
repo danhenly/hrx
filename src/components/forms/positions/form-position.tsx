@@ -29,6 +29,8 @@ import type { Id } from "../../../../convex/_generated/dataModel";
 
 /** Radix Select cannot carry an empty value, so "no department" needs a sentinel. */
 const NO_DEPARTMENT = "__none";
+/** A department that exists only as text (predates the master list, never normalised). */
+const LEGACY_DEPARTMENT = "__legacy";
 
 const positionSchema = z.object({
   name: z.string().min(2, "At least 2 characters").max(80, "80 characters or fewer"),
@@ -36,12 +38,17 @@ const positionSchema = z.object({
   description: z.string().optional(),
 });
 
+type FormPositionPropsDepartment = {
+  /** Display text of the department as recorded (used when it has no master-list link). */
+  department?: string;
+};
+
 type PositionValues = z.infer<typeof positionSchema>;
 
 interface FormPositionProps {
   orgId: Id<"organizations">;
   positionId?: Id<"positions">; // absent = create
-  defaultValues?: Partial<PositionValues>;
+  defaultValues?: Partial<PositionValues> & FormPositionPropsDepartment;
   onDone?: () => void;
 }
 
@@ -56,15 +63,27 @@ export function FormPosition({
   const departments = useQuery(api.departments.list, { orgId });
   const [isPending, startTransition] = useTransition();
 
+  // A row whose department is plain text must NOT be silently cleared by opening this form:
+  // the select would show "No department" and submit empty. It gets its own option instead,
+  // and submits the text unchanged so nothing is lost before "Normalise" runs.
+  const legacyDepartment =
+    !defaultValues?.departmentId && defaultValues?.department ? defaultValues.department : null;
+
   const form = useForm<PositionValues>({
     resolver: zodResolver(positionSchema),
-    defaultValues: { name: "", description: "", ...defaultValues },
+    defaultValues: {
+      name: "",
+      description: "",
+      ...defaultValues,
+      departmentId: defaultValues?.departmentId ?? (legacyDepartment ? LEGACY_DEPARTMENT : undefined),
+    },
   });
 
   function handleSubmit(values: PositionValues) {
     if (isPending) return;
+    const isLegacy = values.departmentId === LEGACY_DEPARTMENT;
     const departmentId =
-      values.departmentId && values.departmentId !== NO_DEPARTMENT
+      values.departmentId && values.departmentId !== NO_DEPARTMENT && !isLegacy
         ? (values.departmentId as Id<"departments">)
         : undefined;
 
@@ -75,8 +94,8 @@ export function FormPosition({
             positionId,
             name: values.name,
             // `undefined` on an edit would leave the old department in place, so a cleared
-            // selection is sent as an explicit empty string.
-            department: departmentId ? undefined : "",
+            // selection is sent as an explicit empty string; a legacy row sends its text back.
+            department: isLegacy ? (defaultValues?.department ?? "") : departmentId ? undefined : "",
             departmentId,
             description: values.description,
           });
@@ -131,6 +150,11 @@ export function FormPosition({
                 </FormControl>
                 <SelectContent>
                   <SelectItem value={NO_DEPARTMENT}>No department</SelectItem>
+                  {legacyDepartment && (
+                    <SelectItem value={LEGACY_DEPARTMENT}>
+                      {legacyDepartment} (not linked — run Normalise)
+                    </SelectItem>
+                  )}
                   {(departments ?? []).map((department) => (
                     <SelectItem key={department._id} value={department._id}>
                       {department.name}
