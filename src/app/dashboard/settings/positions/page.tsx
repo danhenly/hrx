@@ -12,6 +12,7 @@ import {
   SectionTitle,
 } from "@/components/content/section";
 import { PositionsDataTable } from "@/components/data-table/positions/data-table";
+import { DepartmentsCard } from "@/components/forms/positions/departments-card";
 import { FormPosition } from "@/components/forms/positions/form-position";
 import { Button } from "@/components/ui/button";
 import {
@@ -96,6 +97,21 @@ export default function PositionsPage() {
         )}
       </Section>
 
+      <Section>
+        <SectionHeader>
+          <SectionTitle>Departments</SectionTitle>
+          <SectionDescription>
+            The list the position form offers. Renaming a department updates the positions that
+            point at it; history rows keep the name they were recorded with.
+          </SectionDescription>
+        </SectionHeader>
+        {orgId ? (
+          <DepartmentsCard orgId={orgId} isAdmin={isAdmin} />
+        ) : (
+          <p className="text-muted-foreground text-sm">Select an organisation.</p>
+        )}
+      </Section>
+
       <Sheet open={addOpen} onOpenChange={setAddOpen} modal={false}>
         <SheetContent className="w-[420px] overflow-y-auto sm:max-w-[420px]">
           <SheetHeader className="sticky top-0 border-b bg-background pb-4">
@@ -128,6 +144,7 @@ export default function PositionsPage() {
               positionId={editPosition._id}
               defaultValues={{
                 name: editPosition.name,
+                departmentId: editPosition.departmentId,
                 department: editPosition.department,
                 description: editPosition.description,
               }}

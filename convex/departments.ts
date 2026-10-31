@@ -24,9 +24,21 @@ export const list = query({
             .query("departments")
             .withIndex("by_org", (q) => q.eq("orgId", orgId))
             .collect();
+        const positions = await ctx.db
+            .query("positions")
+            .withIndex("by_org", (q) => q.eq("orgId", orgId))
+            .collect();
+        const usage = new Map<string, number>();
+        for (const position of positions) {
+            if (!position.departmentId) continue;
+            const key = String(position.departmentId);
+            usage.set(key, (usage.get(key) ?? 0) + 1);
+        }
+
         return rows
             .filter((row) => (includeInactive ? true : row.isActive))
-            .sort((a, b) => a.name.localeCompare(b.name));
+            .sort((a, b) => a.name.localeCompare(b.name))
+            .map((row) => ({ ...row, positionCount: usage.get(String(row._id)) ?? 0 }));
     },
 });
 
@@ -235,6 +247,24 @@ export const normaliseDepartments = internalMutation({
             action: "department.normalise",
             entityType: "organizations",
             entityId: args.orgId,
+        });
+        return result;
+    },
+});
+
+/** Admin UI path for the same normalisation (idempotent, audited). */
+export const normaliseNow = mutation({
+    args: { orgId: v.id("organizations") },
+    handler: async (ctx, { orgId }) => {
+        const userId = await requireAuth(ctx);
+        await requireAdmin(ctx, userId, orgId);
+        const result = await normalise(ctx, orgId, userId);
+        await logAudit(ctx, {
+            orgId,
+            actorId: userId,
+            action: "department.normalise",
+            entityType: "organizations",
+            entityId: orgId,
         });
         return result;
     },
