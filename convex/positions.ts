@@ -161,8 +161,12 @@ export const update = mutation({
             patch.departmentId = departmentId;
             patch.department = target.name;
         } else if (department !== undefined) {
-            patch.department =
+            // No department id means the caller cleared it: drop the link as well, or the
+            // row would point at a department whose name is no longer on it.
+            const cleaned =
                 department.trim().replace(/\s+/g, " ").replace(/[.,;:]+$/, "") || undefined;
+            patch.department = cleaned;
+            patch.departmentId = undefined;
         }
         if (description !== undefined) patch.description = description.trim() || undefined;
 
