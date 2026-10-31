@@ -154,6 +154,8 @@ export default defineSchema({
         employeeId: v.id("employees"),
         jobTitle: v.string(),
         department: v.optional(v.string()),
+        /** Department as it stood when this history row was written (P12). */
+        departmentId: v.optional(v.id("departments")),
         salary: v.optional(v.number()),      // gross annual, base currency units
         effectiveDate: v.number(),           // Unix ms — when this position started
         endDate: v.optional(v.number()),     // Unix ms — null / absent = still current
@@ -187,11 +189,32 @@ export default defineSchema({
      * Deactivation is the retirement path: history keeps referring to a position
      * that is no longer offered. Deletion is blocked while any history row uses it.
      */
+    /**
+     * Departments (P12) — org-scoped master list. A position points at one of these, so a
+     * department is picked rather than typed, and "MIS" and "mis " cannot become two.
+     */
+    departments: defineTable({
+        orgId: v.id("organizations"),
+        name: v.string(),
+        /** name.trim().toLowerCase(), single-spaced — case-insensitive uniqueness. */
+        nameKey: v.string(),
+        isActive: v.boolean(),
+        createdBy: v.id("users"),
+        createdAt: v.number(),
+        updatedBy: v.id("users"),
+        updatedAt: v.number(),
+    })
+        .index("by_org", ["orgId"])
+        .index("by_org_name_key", ["orgId", "nameKey"])
+        .index("by_org_active", ["orgId", "isActive"]),
+
     positions: defineTable({
         orgId: v.id("organizations"),
         name: v.string(),
         nameKey: v.string(),        // name.trim().toLowerCase() — case-insensitive uniqueness
         department: v.optional(v.string()),
+        /** Canonical department (P12). `department` stays as the display snapshot. */
+        departmentId: v.optional(v.id("departments")),
         description: v.optional(v.string()),
         isActive: v.boolean(),
         createdBy: v.id("users"),

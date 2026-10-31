@@ -4,6 +4,7 @@ import { logAudit } from "./audit";
 import { mutation, query } from "./_generated/server";
 import { requireAdmin, requireAuth, requireMembership } from "./helpers";
 import { annualSalaryFor } from "./lib/payroll/rates";
+import { assertSpacing, closingEndDate } from "./lib/positionHistory";
 import {
     allowanceValidator,
     dailyRateBasisValidator,
@@ -235,18 +236,21 @@ export const addPosition = mutation({
             .first();
 
         if (latest) {
-            if (fields.effectiveDate <= latest.effectiveDate) {
-                throw new ConvexError(
-                    "Effective date must be after the previous position's effective date",
-                );
-            }
-            if (latest.endDate && fields.effectiveDate <= latest.endDate) {
+            // P12: the next record starts at least one DAY after the previous one, and the
+            // previous record is closed the day before it — so no day belongs to two records.
+            assertSpacing({ effectiveDate: fields.effectiveDate, previous: latest });
+            if (latest.endDate !== undefined && fields.effectiveDate <= latest.endDate) {
                 throw new ConvexError(
                     "Effective date must be after the previous position ended",
                 );
             }
+            // Close it only if it is still open. A record that already has an end date
+            // (a separation, a fixed term) is left alone — the check above has already
+            // proved the new record starts after it.
             if (latest.endDate === undefined) {
-                await ctx.db.patch(latest._id, { endDate: fields.effectiveDate });
+                await ctx.db.patch(latest._id, {
+                    endDate: closingEndDate(fields.effectiveDate),
+                });
             }
         }
 
@@ -291,6 +295,7 @@ export const addPosition = mutation({
             positionId,
             jobTitle: masterPosition.name,          // snapshot — history must not follow renames
             department: masterPosition.department,  // snapshot
+            departmentId: masterPosition.departmentId, // snapshot of the canonical department (P12)
             ...rest,
             salary,
             payType,
@@ -373,6 +378,22 @@ export const updatePosition = mutation({
         if (fields.effectiveDate !== undefined) patch.effectiveDate = fields.effectiveDate;
         if (fields.endDate !== undefined) patch.endDate = fields.endDate;
         if (fields.notes !== undefined) patch.notes = fields.notes;
+
+        // P12: moving a date must not collide with either neighbour. Both are read here so a
+        // backdated edit is checked on the side the append path never sees.
+        if (fields.effectiveDate !== undefined) {
+            const siblings = await ctx.db
+                .query("employeePositions")
+                .withIndex("by_employee_effective", (q) => q.eq("employeeId", position.employeeId))
+                .collect();
+            const previous = siblings
+                .filter((row) => row._id !== positionId && row.effectiveDate < effectiveDate)
+                .sort((a, b) => b.effectiveDate - a.effectiveDate)[0];
+            const next = siblings
+                .filter((row) => row._id !== positionId && row.effectiveDate > effectiveDate)
+                .sort((a, b) => a.effectiveDate - b.effectiveDate)[0];
+            assertSpacing({ effectiveDate, previous: previous ?? null, next: next ?? null });
+        }
 
         if (Object.keys(patch).length > 0) await ctx.db.patch(positionId, patch);
         await logAudit(ctx, {

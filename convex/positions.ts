@@ -57,9 +57,10 @@ export const create = mutation({
         orgId: v.id("organizations"),
         name: v.string(),
         department: v.optional(v.string()),
+        departmentId: v.optional(v.id("departments")),
         description: v.optional(v.string()),
     },
-    handler: async (ctx, { orgId, name, department, description }) => {
+    handler: async (ctx, { orgId, name, department, departmentId, description }) => {
         const userId = await requireAuth(ctx);
         await requireMembership(ctx, userId, orgId);
 
@@ -67,6 +68,18 @@ export const create = mutation({
         if (cleanName.length < 2) throw new ConvexError("Position name must be at least 2 characters");
         if (cleanName.length > 80) throw new ConvexError("Position name must be 80 characters or fewer");
         const nameKey = cleanName.toLowerCase();
+
+        // A department is PICKED from the master list (P12). The free-text field is kept
+        // for older callers and normalised through the same rules, so the two cannot diverge.
+        let resolvedDepartment = department;
+        if (departmentId !== undefined) {
+            const target = await ctx.db.get(departmentId);
+            if (!target || target.orgId !== orgId) throw new ConvexError("Department not found");
+            resolvedDepartment = target.name;
+        } else if (department !== undefined) {
+            resolvedDepartment =
+                department.trim().replace(/\s+/g, " ").replace(/[.,;:]+$/, "") || undefined;
+        }
 
         const duplicate = await ctx.db
             .query("positions")
@@ -85,7 +98,8 @@ export const create = mutation({
             orgId,
             name: cleanName,
             nameKey,
-            department: department?.trim() || undefined,
+            department: resolvedDepartment || undefined,
+            departmentId,
             description: description?.trim() || undefined,
             isActive: true,
             createdBy: userId,
@@ -112,9 +126,10 @@ export const update = mutation({
         positionId: v.id("positions"),
         name: v.optional(v.string()),
         department: v.optional(v.string()),
+        departmentId: v.optional(v.id("departments")),
         description: v.optional(v.string()),
     },
-    handler: async (ctx, { positionId, name, department, description }) => {
+    handler: async (ctx, { positionId, name, department, departmentId, description }) => {
         const userId = await requireAuth(ctx);
         const position = await ctx.db.get(positionId);
         if (!position) throw new ConvexError("Position not found");
@@ -140,7 +155,15 @@ export const update = mutation({
             patch.name = cleanName;
             patch.nameKey = nameKey;
         }
-        if (department !== undefined) patch.department = department.trim() || undefined;
+        if (departmentId !== undefined) {
+            const target = await ctx.db.get(departmentId);
+            if (!target || target.orgId !== position.orgId) throw new ConvexError("Department not found");
+            patch.departmentId = departmentId;
+            patch.department = target.name;
+        } else if (department !== undefined) {
+            patch.department =
+                department.trim().replace(/\s+/g, " ").replace(/[.,;:]+$/, "") || undefined;
+        }
         if (description !== undefined) patch.description = description.trim() || undefined;
 
         await ctx.db.patch(positionId, patch);
