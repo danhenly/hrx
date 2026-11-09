@@ -3,7 +3,7 @@
 **Skill:** `vercel-react-best-practices` v1.0.0 (Vercel Engineering, MIT) — 70 rules, 8 categories
 **Commit:** `5c2ea7d` · **Stack:** Next.js 16.1.6 (App Router, Turbopack), React 19.2.3, Convex, Tailwind v4, Biome
 **Scope:** 131 `.ts/.tsx` files (26,775 lines incl. `convex/`), read-only static review
-**Fixes applied:** F1, F3, F11, F13 (see status lines below). `tsc`, `biome lint` and `next build` run in CI (`.github/workflows/ci.yml`).
+**Fixes applied:** F1, F2, F3, F4, F6, F11, F13 (see status lines below). `tsc`, `biome lint` and `next build` run in CI (`.github/workflows/ci.yml`).
 **Not run:** `pnpm lint`, `pnpm tsc`, production build — host has 1.6 GB RAM and builds freeze it; CI owns those gates.
 
 ---
@@ -23,6 +23,7 @@ Every TimePage render (filter change, row-selection checkbox, date input keystro
 - `:212` — `rows.map((row) => <tr>...)` inline; no per-row component.
 - `:65-90` — `useEffect([entries])` maps every entry and calls `setRows(...)` (second render per server update; also clobbers in-flight edits when a query refresh lands).
 
+> **Status: FIXED** — rows are a memoised `EntryRow`; edits touch one row's object identity, so the rest do not re-render.
 Each cell edit (`updateRow`) replaces the array, so a 20-row × 3-interval week re-renders 20 rows and rebuilds every `<Select>` element tree while typing.
 **Fix:** extract a memoized `<EntryRow>` that owns its cell state, keep only a draft map at the parent, and derive server rows instead of copying them into state.
 
@@ -40,6 +41,7 @@ Any `OrgProvider` render — including every `organizations.listMyOrgs` update �
 ### F4. Server data copied into five `useState`s via an effect (rerender-derived-state-no-effect)
 - `src/components/forms/payroll/form-payroll-settings.tsx:44-57`
 
+> **Status: FIXED** — the form mounts only after data loads and seeds `useState` once; no sync effect, no clobbering.
 Default values are re-applied whenever `data` changes, so a settings refetch silently discards unsaved edits, and the first paint shows defaults before the effect lands.
 **Fix:** initialise once (`useState(() => data.settings...)` guarded by a loaded skeleton + `key`), or drive the form with defaults from a keyed child.
 
@@ -52,6 +54,7 @@ Consequence: every dashboard route ships its JS first, then starts Convex querie
 ### F6. Index keys on a mutable interval list (rendering/keys correctness)
 - `src/components/forms/timekeeping/manual-entry-grid.tsx:251` — `key={idx}` over `row.intervals`.
 
+> **Status: FIXED** — intervals carry a generated `id` and updates match on it, not the array index.
 Removing or reordering an interval shifts values and focus to the neighbouring input because React reuses the DOM by position.
 **Fix:** give each interval a generated id (`crypto.randomUUID()` on add).
 - `src/components/nav/nav-breadcrumb.tsx:50,78` uses index keys too, but those lists are static — acceptable.
@@ -85,7 +88,7 @@ Minor; a module-level `Intl.DateTimeFormat` is cheaper and avoids re-parsing the
 - `src/app/layout.tsx:48` — `<PlausibleProvider domain="template.openstatus.dev">`. Analytics from HRX is reported against the openstatus template domain, not HRX.
 - `src/components/feedback.tsx:53` — leftover `console.log(values)` in the submit path.
 
-> **Status: FIXED** — analytics is opt-in via `NEXT_PUBLIC_PLAUSIBLE_DOMAIN`; no template domain ships. `console.log` removal still open.
+> **Status: FIXED** — analytics is opt-in via `NEXT_PUBLIC_PLAUSIBLE_DOMAIN`; no template domain ships; the stray `console.log` is removed.
 ### F12. Next.js 16 standard: `middleware` is deprecated
 - `src/middleware.ts` — renamed to `proxy.ts` in Next 16 (`v16.0.0` in the Next docs version history). Still works in 16.1.6 with a deprecation warning.
 **Fix:** `npx @next/codemod@latest middleware-to-proxy` (renames the file and the exported function), then re-run the route-protection tests.

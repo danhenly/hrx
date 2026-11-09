@@ -50,7 +50,6 @@ export function Feedback({
           resolve();
         }, 1000);
       });
-      console.log(values);
       toast.promise(promise, {
         loading: "Sending feedback...",
         success: "Feedback sent!",
