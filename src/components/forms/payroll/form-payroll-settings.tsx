@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery } from "convex/react";
-import { useEffect, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,29 +32,6 @@ export function FormPayrollSettings({
   isAdmin: boolean;
 }) {
   const data = useQuery(api.payroll.settings.get, { orgId });
-  const save = useMutation(api.payroll.settings.update);
-  const [isPending, startTransition] = useTransition();
-
-  const [workWeek, setWorkWeek] = useState<"5_day" | "6_day">("6_day");
-  const [dailyRateBasis, setDailyRateBasis] = useState<"261" | "313" | "22" | "26">("313");
-  const [statutoryBasis, setStatutoryBasis] = useState<"basic" | "gross" | "gross_taxable">("basic");
-  const [cutoffDays, setCutoffDays] = useState<[string, string]>(["10", "25"]);
-  const [payDays, setPayDays] = useState<[string, string]>(["15", "30"]);
-
-  useEffect(() => {
-    if (!data) return;
-    setWorkWeek(data.settings.workWeek);
-    setDailyRateBasis(data.settings.dailyRateBasis);
-    setStatutoryBasis(data.settings.statutoryBasis);
-    setCutoffDays([
-      String(data.settings.cutoffDays[0] ?? 10),
-      String(data.settings.cutoffDays[1] ?? 25),
-    ]);
-    setPayDays([
-      String(data.settings.payDays[0] ?? 15),
-      String(data.settings.payDays[1] ?? 30),
-    ]);
-  }, [data]);
 
   if (data === undefined) {
     return (
@@ -64,6 +41,59 @@ export function FormPayrollSettings({
       </div>
     );
   }
+
+  return (
+    <PayrollSettingsForm
+      key={orgId}
+      orgId={orgId}
+      isAdmin={isAdmin}
+      settings={data.settings}
+      isDefault={data.isDefault}
+    />
+  );
+}
+
+type PayrollSettingsValues = {
+  workWeek: "5_day" | "6_day";
+  dailyRateBasis: "261" | "313" | "22" | "26";
+  statutoryBasis: "basic" | "gross" | "gross_taxable";
+  cutoffDays: number[];
+  payDays: number[];
+};
+
+function PayrollSettingsForm({
+  orgId,
+  isAdmin,
+  settings,
+  isDefault,
+}: {
+  orgId: Id<"organizations">;
+  isAdmin: boolean;
+  settings: PayrollSettingsValues;
+  isDefault: boolean;
+}) {
+  const save = useMutation(api.payroll.settings.update);
+  const [isPending, startTransition] = useTransition();
+
+  // Seeded once on mount from the loaded settings: no effect, no double render,
+  // and a background refetch cannot overwrite what the admin is editing.
+  const [workWeek, setWorkWeek] = useState<PayrollSettingsValues["workWeek"]>(
+    settings.workWeek,
+  );
+  const [dailyRateBasis, setDailyRateBasis] = useState<
+    PayrollSettingsValues["dailyRateBasis"]
+  >(settings.dailyRateBasis);
+  const [statutoryBasis, setStatutoryBasis] = useState<
+    PayrollSettingsValues["statutoryBasis"]
+  >(settings.statutoryBasis);
+  const [cutoffDays, setCutoffDays] = useState<[string, string]>([
+    String(settings.cutoffDays[0] ?? 10),
+    String(settings.cutoffDays[1] ?? 25),
+  ]);
+  const [payDays, setPayDays] = useState<[string, string]>([
+    String(settings.payDays[0] ?? 15),
+    String(settings.payDays[1] ?? 30),
+  ]);
 
   function handleSave() {
     startTransition(async () => {
@@ -85,7 +115,7 @@ export function FormPayrollSettings({
 
   return (
     <div className="space-y-4">
-      {data.isDefault && (
+      {isDefault && (
         <p className="rounded-md border border-dashed p-3 text-muted-foreground text-sm">
           This org has never saved payroll conventions — the pilot defaults
           (6-day week, basis 313, cutoffs 10/25 paid 15/30) are shown.
@@ -147,8 +177,8 @@ export function FormPayrollSettings({
             ))}
           </select>
           <p className="text-muted-foreground text-xs">
-            The pilot uses basic pay. Printed on every payslip so the employee can
-            reconcile it.
+            The pilot uses basic pay. Printed on every payslip so the employee
+            can reconcile it.
           </p>
         </div>
         <div className="space-y-1.5">
