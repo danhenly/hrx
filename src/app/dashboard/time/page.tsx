@@ -3,7 +3,7 @@
 import type { RowSelectionState } from "@tanstack/react-table";
 import { useMutation, useQuery } from "convex/react";
 import { Download } from "lucide-react";
-import { useMemo, useState, useTransition } from "react";
+import { useCallback, useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { TimesheetsDataTable } from "@/components/data-table/timesheets/data-table";
 import { ReasonDialog } from "@/components/forms/timekeeping/reason-dialog";
@@ -52,12 +52,13 @@ type BatchAction = "submit" | "approve" | "reject" | "lock" | "unlock";
  */
 type ExportStatus = "payroll" | "approved" | "locked" | "all";
 
-const EXPORT_STATUSES: Record<ExportStatus, TimeEntry["status"][] | undefined> = {
-  payroll: ["approved", "locked"],
-  approved: ["approved"],
-  locked: ["locked"],
-  all: undefined,
-};
+const EXPORT_STATUSES: Record<ExportStatus, TimeEntry["status"][] | undefined> =
+  {
+    payroll: ["approved", "locked"],
+    approved: ["approved"],
+    locked: ["locked"],
+    all: undefined,
+  };
 
 type DialogKind = "reject" | "unlock" | "delete";
 
@@ -170,39 +171,42 @@ export default function TimePage() {
    * One mutation per action, not one per row: the server applies the eligible
    * rows in a single transaction and reports the rest as skipped.
    */
-  function runBatch(
-    kind: BatchAction,
-    entryIds: Id<"timeEntries">[],
-    reason?: string,
-  ) {
-    if (!orgId || entryIds.length === 0) return;
+  const runBatch = useCallback(
+    (kind: BatchAction, entryIds: Id<"timeEntries">[], reason?: string) => {
+      if (!orgId || entryIds.length === 0) return;
 
-    startTransition(async () => {
-      try {
-        const result =
-          kind === "submit"
-            ? await submitDays({ orgId, entryIds })
-            : kind === "approve"
-              ? await approveDays({ orgId, entryIds })
-              : kind === "reject"
-                ? await rejectDays({ orgId, entryIds, reason })
-                : kind === "unlock"
-                  ? await unlockDays({ orgId, entryIds, reason: reason ?? "" })
-                  : await lockDays({ orgId, entryIds });
+      startTransition(async () => {
+        try {
+          const result =
+            kind === "submit"
+              ? await submitDays({ orgId, entryIds })
+              : kind === "approve"
+                ? await approveDays({ orgId, entryIds })
+                : kind === "reject"
+                  ? await rejectDays({ orgId, entryIds, reason })
+                  : kind === "unlock"
+                    ? await unlockDays({
+                        orgId,
+                        entryIds,
+                        reason: reason ?? "",
+                      })
+                    : await lockDays({ orgId, entryIds });
 
-        if (result.skipped.length === 0) {
-          toast.success(`${result.applied} ${VERBS[kind]}`);
-        } else {
-          toast.error(
-            `${result.applied} ${VERBS[kind]}, ${result.skipped.length} skipped — ${result.skipped[0].reason}`,
-          );
+          if (result.skipped.length === 0) {
+            toast.success(`${result.applied} ${VERBS[kind]}`);
+          } else {
+            toast.error(
+              `${result.applied} ${VERBS[kind]}, ${result.skipped.length} skipped — ${result.skipped[0].reason}`,
+            );
+          }
+          setRowSelection({});
+        } catch (err) {
+          toast.error((err as Error).message ?? "Action failed");
         }
-        setRowSelection({});
-      } catch (err) {
-        toast.error((err as Error).message ?? "Action failed");
-      }
-    });
-  }
+      });
+    },
+    [orgId, submitDays, approveDays, rejectDays, unlockDays, lockDays],
+  );
 
   function handleExport() {
     if (!exportData || exportData.rows.length === 0) {
@@ -224,105 +228,108 @@ export default function TimePage() {
     toast.success(`${exportData.rows.length} rows exported`);
   }
 
-  function renderActions(entry: TimeEntry) {
-    const stop = (event: React.MouseEvent) => event.stopPropagation();
-    const canSubmit =
-      TARGET_STATUSES.submit.includes(entry.status) &&
-      (isAdmin || entry.createdBy === me?._id);
+  const renderActions = useCallback(
+    (entry: TimeEntry) => {
+      const stop = (event: React.MouseEvent) => event.stopPropagation();
+      const canSubmit =
+        TARGET_STATUSES.submit.includes(entry.status) &&
+        (isAdmin || entry.createdBy === me?._id);
 
-    if (canSubmit) {
-      return (
-        <>
-          <Button
-            size="sm"
-            variant="secondary"
-            disabled={isPending}
-            onClick={(event) => {
-              stop(event);
-              runBatch("submit", [entry._id]);
-            }}
-          >
-            Submit
-          </Button>
-          {isAdmin && entry.status === "rejected" ? (
+      if (canSubmit) {
+        return (
+          <>
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={isPending}
+              onClick={(event) => {
+                stop(event);
+                runBatch("submit", [entry._id]);
+              }}
+            >
+              Submit
+            </Button>
+            {isAdmin && entry.status === "rejected" ? (
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={isPending}
+                onClick={(event) => {
+                  stop(event);
+                  setDialog({ kind: "delete", entryIds: [entry._id] });
+                }}
+              >
+                Delete
+              </Button>
+            ) : null}
+          </>
+        );
+      }
+
+      if (isAdmin && entry.status === "submitted") {
+        return (
+          <>
+            <Button
+              size="sm"
+              disabled={isPending}
+              onClick={(event) => {
+                stop(event);
+                runBatch("approve", [entry._id]);
+              }}
+            >
+              Approve
+            </Button>
             <Button
               size="sm"
               variant="ghost"
               disabled={isPending}
               onClick={(event) => {
                 stop(event);
-                setDialog({ kind: "delete", entryIds: [entry._id] });
+                setDialog({ kind: "reject", entryIds: [entry._id] });
               }}
             >
-              Delete
+              Reject
             </Button>
-          ) : null}
-        </>
-      );
-    }
+          </>
+        );
+      }
 
-    if (isAdmin && entry.status === "submitted") {
-      return (
-        <>
+      if (isAdmin && entry.status === "approved") {
+        return (
           <Button
             size="sm"
+            variant="outline"
             disabled={isPending}
             onClick={(event) => {
               stop(event);
-              runBatch("approve", [entry._id]);
+              runBatch("lock", [entry._id]);
             }}
           >
-            Approve
+            Lock
           </Button>
+        );
+      }
+
+      if (isAdmin && entry.status === "locked") {
+        return (
           <Button
             size="sm"
-            variant="ghost"
+            variant="outline"
             disabled={isPending}
             onClick={(event) => {
               stop(event);
-              setDialog({ kind: "reject", entryIds: [entry._id] });
+              setDialog({ kind: "unlock", entryIds: [entry._id] });
             }}
           >
-            Reject
+            Unlock
           </Button>
-        </>
-      );
-    }
+        );
+      }
 
-    if (isAdmin && entry.status === "approved") {
-      return (
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={isPending}
-          onClick={(event) => {
-            stop(event);
-            runBatch("lock", [entry._id]);
-          }}
-        >
-          Lock
-        </Button>
-      );
-    }
-
-    if (isAdmin && entry.status === "locked") {
-      return (
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={isPending}
-          onClick={(event) => {
-            stop(event);
-            setDialog({ kind: "unlock", entryIds: [entry._id] });
-          }}
-        >
-          Unlock
-        </Button>
-      );
-    }
-
-    return null;
-  }
+      return null;
+    },
+    [isAdmin, me?._id, isPending, runBatch],
+  );
 
   const rangeMinutes = useMemo(
     () => entries?.reduce((sum, entry) => sum + entry.totalMinutes, 0),
@@ -452,7 +459,9 @@ export default function TimePage() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="payroll">Export payroll (approved + locked)</SelectItem>
+              <SelectItem value="payroll">
+                Export payroll (approved + locked)
+              </SelectItem>
               <SelectItem value="approved">Export approved only</SelectItem>
               <SelectItem value="locked">Export locked only</SelectItem>
               <SelectItem value="all">Export all statuses</SelectItem>
@@ -592,9 +601,7 @@ export default function TimePage() {
         <ModuleStat value={visible.length} label="entries in view" />
         <ModuleStat
           value={
-            rangeMinutes === undefined
-              ? "—"
-              : formatDuration(rangeMinutes)
+            rangeMinutes === undefined ? "—" : formatDuration(rangeMinutes)
           }
           label="logged in range"
         />

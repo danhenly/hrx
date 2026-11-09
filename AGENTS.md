@@ -249,6 +249,7 @@ Role is stored on the `members` table, not on the `users` table. Always check th
 | `NEXT_PUBLIC_CONVEX_SITE_URL` | `.env.local` | Convex site URL for HTTP actions |
 | `CONVEX_AUTH_PRIVATE_KEY` | Convex dashboard env vars | JWT signing key for Convex Auth |
 | `CONVEX_AUTH_ADAPTER_SECRET` | Convex dashboard env vars | Cookie encryption key (set automatically by `convex dev`) |
+| `NEXT_PUBLIC_PLAUSIBLE_DOMAIN` | build env (optional) | Plausible analytics domain; unset = analytics not rendered |
 
 Never commit secrets. `.env.local` is gitignored.
 
@@ -276,7 +277,7 @@ pnpm format:fix              # Biome auto-fix
 - ❌ Using `@node-rs/argon2` or any native `.node` binary in Convex functions
 - ❌ Using `useState` for async loading state — prefer `useTransition`
 - ❌ Returning org data without first calling `requireMembership` or `requireAdmin`
-- ❌ Adding `output: "export"` limitations — note `next.config.ts` currently has `output: "export"` which disables many server features; if adding server-side features (API routes, server actions), remove this option
+- ❌ Switching `next.config.ts` to `output: "export"` — the app deploys with `output: "standalone"` (Docker/Coolify), so server features (route handlers, server actions, dynamic rendering) are available; a static export would silently remove them
 - ❌ Importing `api` via `@/` alias — it must be a relative import from `convex/_generated/api`
 
 ---
