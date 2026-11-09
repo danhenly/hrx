@@ -12,9 +12,13 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { useIsAdmin } from "@/providers/org-provider";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
-import { FormStatutoryTable, type StatutoryRowDraft } from "./form-statutory-table";
+import {
+  FormStatutoryTable,
+  type StatutoryRowDraft,
+} from "./form-statutory-table";
 
 /**
  * The practitioner's view of the statutory tables (D17): what is in force, what is
@@ -31,7 +35,14 @@ const KIND_LABELS: Record<string, string> = {
   holiday: "Holiday calendar",
 };
 
-const KIND_ORDER = ["sss", "philhealth", "pagibig", "tax", "deminimis", "holiday"];
+const KIND_ORDER = [
+  "sss",
+  "philhealth",
+  "pagibig",
+  "tax",
+  "deminimis",
+  "holiday",
+];
 
 const manilaDate = new Intl.DateTimeFormat("en-CA", {
   timeZone: "Asia/Manila",
@@ -40,13 +51,8 @@ const manilaDate = new Intl.DateTimeFormat("en-CA", {
   day: "2-digit",
 });
 
-export function StatutoryTables({
-  orgId,
-  isAdmin,
-}: {
-  orgId: Id<"organizations">;
-  isAdmin: boolean;
-}) {
+export function StatutoryTables({ orgId }: { orgId: Id<"organizations"> }) {
+  const isAdmin = useIsAdmin();
   const rows = useQuery(api.payroll.statutoryTables.list, { orgId });
   const [draft, setDraft] = useState<StatutoryRowDraft | null>(null);
 
@@ -80,7 +86,9 @@ export function StatutoryTables({
           return (
             <div key={kind} className="space-y-2">
               <div className="flex items-center justify-between">
-                <h3 className="font-medium text-sm">{KIND_LABELS[kind] ?? kind}</h3>
+                <h3 className="font-medium text-sm">
+                  {KIND_LABELS[kind] ?? kind}
+                </h3>
                 {isAdmin && (
                   <Button
                     type="button"
@@ -90,7 +98,9 @@ export function StatutoryTables({
                     onClick={() => {
                       const latest = kindRows[kindRows.length - 1];
                       const nextYear = new Date(
-                        latest ? latest.effectiveFrom + 366 * 24 * 3600 * 1000 : Date.now(),
+                        latest
+                          ? latest.effectiveFrom + 366 * 24 * 3600 * 1000
+                          : Date.now(),
                       );
                       setDraft({
                         kind: kind as StatutoryRowDraft["kind"],
@@ -119,7 +129,9 @@ export function StatutoryTables({
                             ? ` → ${manilaDate.format(new Date(row.effectiveTo))}`
                             : " → open"}
                         </span>
-                        {row.inForce && <Badge className="text-xs">In force</Badge>}
+                        {row.inForce && (
+                          <Badge className="text-xs">In force</Badge>
+                        )}
                         {row.upcoming && (
                           <Badge variant="secondary" className="text-xs">
                             Upcoming
@@ -143,7 +155,9 @@ export function StatutoryTables({
                         onClick={() =>
                           setDraft({
                             kind: row.kind as StatutoryRowDraft["kind"],
-                            effectiveFrom: manilaDate.format(new Date(row.effectiveFrom)),
+                            effectiveFrom: manilaDate.format(
+                              new Date(row.effectiveFrom),
+                            ),
                             effectiveTo: row.effectiveTo
                               ? manilaDate.format(new Date(row.effectiveTo))
                               : undefined,
@@ -171,7 +185,9 @@ export function StatutoryTables({
         <SheetContent className="w-[560px] overflow-y-auto sm:max-w-[560px]">
           <SheetHeader className="sticky top-0 border-b bg-background pb-4">
             <SheetTitle>
-              {draft ? (KIND_LABELS[draft.kind] ?? draft.kind) : "Statutory table"}
+              {draft
+                ? (KIND_LABELS[draft.kind] ?? draft.kind)
+                : "Statutory table"}
             </SheetTitle>
             <SheetDescription>
               Ranges for one kind may not overlap, and the source is required.

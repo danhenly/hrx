@@ -46,6 +46,7 @@ import {
   WORK_WEEKS,
 } from "@/lib/payroll";
 import { cn } from "@/lib/utils";
+import { useIsAdmin } from "@/providers/org-provider";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 
@@ -81,7 +82,6 @@ const EMPTY_ALLOWANCE: AllowanceDraft = {
 interface FormPositionHistoryProps {
   employeeId: Id<"employees">;
   positions: EmployeePosition[];
-  isAdmin: boolean;
   orgId: Id<"organizations"> | undefined;
 }
 
@@ -95,9 +95,9 @@ const peso = (value: number) =>
 export function FormPositionHistory({
   employeeId,
   positions,
-  isAdmin,
   orgId,
 }: FormPositionHistoryProps) {
+  const isAdmin = useIsAdmin();
   const addPosition = useMutation(api.employees.addPosition);
   const masterlist = useQuery(
     api.positions.list,

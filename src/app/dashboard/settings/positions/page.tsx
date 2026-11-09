@@ -23,20 +23,19 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import type { PositionWithUsage } from "@/data/positions";
-import { useActiveOrg } from "@/providers/org-provider";
+import { useActiveOrg, useIsAdmin } from "@/providers/org-provider";
 import { api } from "../../../../../convex/_generated/api";
 import type { Id } from "../../../../../convex/_generated/dataModel";
 
 export default function PositionsPage() {
   const { orgId } = useActiveOrg();
-  const me = useQuery(api.users.getMe, orgId ? { orgId } : {});
+  const isAdmin = useIsAdmin();
   const positions = useQuery(
     api.positions.list,
     orgId ? { orgId, includeInactive: true } : "skip",
   ) as PositionWithUsage[] | undefined;
   const setActive = useMutation(api.positions.setActive);
   const [isPending, startTransition] = useTransition();
-  const isAdmin = me?.membership?.role === "admin";
 
   const [addOpen, setAddOpen] = useState(false);
   const [editPosition, setEditPosition] = useState<PositionWithUsage | null>(
@@ -87,7 +86,6 @@ export default function PositionsPage() {
         ) : (
           <PositionsDataTable
             data={positions}
-            isAdmin={isAdmin}
             onEdit={setEditPosition}
             onSetActive={handleSetActive}
           />
@@ -101,14 +99,17 @@ export default function PositionsPage() {
         <SectionHeader>
           <SectionTitle>Departments</SectionTitle>
           <SectionDescription>
-            The list the position form offers. Renaming a department updates the positions that
-            point at it; history rows keep the name they were recorded with.
+            The list the position form offers. Renaming a department updates the
+            positions that point at it; history rows keep the name they were
+            recorded with.
           </SectionDescription>
         </SectionHeader>
         {orgId ? (
-          <DepartmentsCard orgId={orgId} isAdmin={isAdmin} />
+          <DepartmentsCard orgId={orgId} />
         ) : (
-          <p className="text-muted-foreground text-sm">Select an organisation.</p>
+          <p className="text-muted-foreground text-sm">
+            Select an organisation.
+          </p>
         )}
       </Section>
 

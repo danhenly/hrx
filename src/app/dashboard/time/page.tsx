@@ -6,7 +6,11 @@ import { Download } from "lucide-react";
 import { useCallback, useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { TimesheetsDataTable } from "@/components/data-table/timesheets/data-table";
-import { ReasonDialog } from "@/components/forms/timekeeping/reason-dialog";
+import {
+  DeleteEntryDialog,
+  RejectDaysDialog,
+  UnlockDaysDialog,
+} from "@/components/forms/timekeeping/reason-dialog";
 import { TimeEntrySheet } from "@/components/forms/timekeeping/time-entry-sheet";
 import {
   ModuleBody,
@@ -360,34 +364,17 @@ export default function TimePage() {
   }
 
   const dialogCount = dialog?.entryIds.length ?? 0;
-  const dialogNoun = dialogCount === 1 ? "entry" : "entries";
-  const dialogConfig =
-    dialog?.kind === "unlock"
-      ? {
-          title: `Unlock ${dialogCount} ${dialogNoun}`,
-          description:
-            "The day returns to the employee as rejected so it can be corrected and resubmitted. The lock and this reason stay on the record.",
-          confirmLabel: `Unlock ${dialogCount}`,
-          requireReason: true,
-          destructive: false,
-        }
-      : dialog?.kind === "delete"
-        ? {
-            title: `Delete ${dialogCount} ${dialogNoun}`,
-            description:
-              "A rejected entry is removed permanently. The deletion is audited.",
-            confirmLabel: "Delete",
-            requireReason: false,
-            destructive: true,
-          }
-        : {
-            title: `Reject ${dialogCount} ${dialogNoun}`,
-            description:
-              "The reason is copied to every selected entry, so the employee sees the same note on each day.",
-            confirmLabel: `Reject ${dialogCount}`,
-            requireReason: true,
-            destructive: false,
-          };
+
+  function confirmDialog(reason: string) {
+    const request = dialog;
+    setDialog(null);
+    if (!request) return;
+    if (request.kind === "delete") {
+      runDelete(request.entryIds[0]);
+      return;
+    }
+    runBatch(request.kind, request.entryIds, reason);
+  }
 
   return (
     <>
@@ -625,26 +612,32 @@ export default function TimePage() {
         />
       ) : null}
 
-      <ReasonDialog
-        open={dialog !== null}
-        title={dialogConfig.title}
-        description={dialogConfig.description}
-        confirmLabel={dialogConfig.confirmLabel}
-        requireReason={dialogConfig.requireReason}
-        destructive={dialogConfig.destructive}
-        pending={isPending}
-        onCancel={() => setDialog(null)}
-        onConfirm={(reason) => {
-          const request = dialog;
-          setDialog(null);
-          if (!request) return;
-          if (request.kind === "delete") {
-            runDelete(request.entryIds[0]);
-            return;
-          }
-          runBatch(request.kind, request.entryIds, reason);
-        }}
-      />
+      {dialog?.kind === "reject" ? (
+        <RejectDaysDialog
+          count={dialogCount}
+          pending={isPending}
+          onCancel={() => setDialog(null)}
+          onConfirm={confirmDialog}
+        />
+      ) : null}
+
+      {dialog?.kind === "unlock" ? (
+        <UnlockDaysDialog
+          count={dialogCount}
+          pending={isPending}
+          onCancel={() => setDialog(null)}
+          onConfirm={confirmDialog}
+        />
+      ) : null}
+
+      {dialog?.kind === "delete" ? (
+        <DeleteEntryDialog
+          count={dialogCount}
+          pending={isPending}
+          onCancel={() => setDialog(null)}
+          onConfirm={() => confirmDialog("")}
+        />
+      ) : null}
     </>
   );
 }

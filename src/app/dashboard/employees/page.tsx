@@ -16,15 +16,12 @@ import type { Id } from "../../../../convex/_generated/dataModel";
 
 export default function EmployeesPage() {
   const { orgId } = useActiveOrg();
-  const me = useQuery(api.users.getMe, orgId ? { orgId } : {});
 
   const employees = useQuery(api.employees.list, orgId ? { orgId } : "skip") as
     | EmployeeWithPosition[]
     | undefined;
 
   const removeEmployee = useMutation(api.employees.remove);
-
-  const isAdmin = me?.membership?.role === "admin";
 
   const [editEmployee, setEditEmployee] = useState<EmployeeWithPosition | null>(
     null,
@@ -59,7 +56,6 @@ export default function EmployeesPage() {
         ) : (
           <EmployeeDataTable
             data={employees}
-            isAdmin={isAdmin}
             onEdit={setEditEmployee}
             onDelete={handleDelete}
           />
@@ -75,7 +71,6 @@ export default function EmployeesPage() {
 
       <EditEmployeeSheet
         employee={editEmployee}
-        isAdmin={isAdmin}
         open={!!editEmployee}
         onOpenChange={(open) => {
           if (!open) setEditEmployee(null);

@@ -71,3 +71,13 @@ export function useActiveOrg() {
   if (!ctx) throw new Error("useActiveOrg must be used inside OrgProvider");
   return ctx;
 }
+
+/**
+ * Role-gated UI reads the provider, not a prop: the org context already knows the
+ * active membership, so pages do not fetch `users.getMe` just to thread a boolean
+ * through every intermediate component.
+ */
+export function useIsAdmin() {
+  const { role } = useActiveOrg();
+  return role === "admin";
+}
