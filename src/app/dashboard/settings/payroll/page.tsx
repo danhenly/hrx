@@ -1,6 +1,5 @@
 "use client";
 
-import { useQuery } from "convex/react";
 import {
   Section,
   SectionDescription,
@@ -11,7 +10,6 @@ import {
 import { FormPayrollSettings } from "@/components/forms/payroll/form-payroll-settings";
 import { StatutoryTables } from "@/components/forms/payroll/statutory-tables";
 import { useActiveOrg } from "@/providers/org-provider";
-import { api } from "../../../../../convex/_generated/api";
 
 /**
  * Settings → Payroll (P0.5b).
@@ -22,8 +20,6 @@ import { api } from "../../../../../convex/_generated/api";
  */
 export default function PayrollSettingsPage() {
   const { orgId } = useActiveOrg();
-  const me = useQuery(api.users.getMe, orgId ? { orgId } : {});
-  const isAdmin = me?.membership?.role === "admin";
 
   return (
     <SectionGroup>
@@ -31,13 +27,16 @@ export default function PayrollSettingsPage() {
         <SectionHeader>
           <SectionTitle>Payroll defaults</SectionTitle>
           <SectionDescription>
-            The conventions a run uses when a position row does not state its own.
+            The conventions a run uses when a position row does not state its
+            own.
           </SectionDescription>
         </SectionHeader>
         {orgId ? (
-          <FormPayrollSettings orgId={orgId} isAdmin={isAdmin} />
+          <FormPayrollSettings orgId={orgId} />
         ) : (
-          <p className="text-muted-foreground text-sm">Select an organisation.</p>
+          <p className="text-muted-foreground text-sm">
+            Select an organisation.
+          </p>
         )}
       </Section>
 
@@ -45,16 +44,18 @@ export default function PayrollSettingsPage() {
         <SectionHeader>
           <SectionTitle>Statutory tables</SectionTitle>
           <SectionDescription>
-            SSS, PhilHealth, Pag-IBIG, BIR withholding, the de minimis ceilings and
-            the holiday calendar — versioned by effective date, each with its
-            source. Enter a new schedule before it applies; the engine uses it from
-            that date with no deploy.
+            SSS, PhilHealth, Pag-IBIG, BIR withholding, the de minimis ceilings
+            and the holiday calendar — versioned by effective date, each with
+            its source. Enter a new schedule before it applies; the engine uses
+            it from that date with no deploy.
           </SectionDescription>
         </SectionHeader>
         {orgId ? (
-          <StatutoryTables orgId={orgId} isAdmin={isAdmin} />
+          <StatutoryTables orgId={orgId} />
         ) : (
-          <p className="text-muted-foreground text-sm">Select an organisation.</p>
+          <p className="text-muted-foreground text-sm">
+            Select an organisation.
+          </p>
         )}
       </Section>
     </SectionGroup>

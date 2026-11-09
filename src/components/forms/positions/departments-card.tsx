@@ -1,11 +1,9 @@
 "use client";
 
 import { useMutation, useQuery } from "convex/react";
-import { useState, useTransition } from "react";
 import { Plus } from "lucide-react";
+import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { api } from "../../../../convex/_generated/api";
-import type { Id } from "../../../../convex/_generated/dataModel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,6 +15,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useIsAdmin } from "@/providers/org-provider";
+import { api } from "../../../../convex/_generated/api";
+import type { Id } from "../../../../convex/_generated/dataModel";
 
 /**
  * Departments (P12).
@@ -25,14 +26,12 @@ import {
  * "normalise" action merges the spellings that predate the list; it never renames one
  * department into another.
  */
-export function DepartmentsCard({
-  orgId,
-  isAdmin,
-}: {
-  orgId: Id<"organizations">;
-  isAdmin: boolean;
-}) {
-  const departments = useQuery(api.departments.list, { orgId, includeInactive: true });
+export function DepartmentsCard({ orgId }: { orgId: Id<"organizations"> }) {
+  const isAdmin = useIsAdmin();
+  const departments = useQuery(api.departments.list, {
+    orgId,
+    includeInactive: true,
+  });
   const createDepartment = useMutation(api.departments.create);
   const renameDepartment = useMutation(api.departments.rename);
   const setActive = useMutation(api.departments.setActive);
@@ -126,7 +125,9 @@ export function DepartmentsCard({
                     department.name
                   )}
                 </TableCell>
-                <TableCell className="text-right">{department.positionCount}</TableCell>
+                <TableCell className="text-right">
+                  {department.positionCount}
+                </TableCell>
                 <TableCell>
                   {department.isActive ? (
                     <Badge variant="secondary">active</Badge>
@@ -186,7 +187,9 @@ export function DepartmentsCard({
                                 id: department._id,
                                 isActive: !department.isActive,
                               }),
-                            department.isActive ? "Department deactivated" : "Department reactivated",
+                            department.isActive
+                              ? "Department deactivated"
+                              : "Department reactivated",
                           )
                         }
                       >
@@ -200,8 +203,8 @@ export function DepartmentsCard({
             {(departments ?? []).length === 0 && (
               <TableRow>
                 <TableCell className="text-muted-foreground" colSpan={4}>
-                  No departments yet. Add one here, or press “Normalise spellings” to collect
-                  the values already used by positions.
+                  No departments yet. Add one here, or press “Normalise
+                  spellings” to collect the values already used by positions.
                 </TableCell>
               </TableRow>
             )}

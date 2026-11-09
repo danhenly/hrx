@@ -1,4 +1,3 @@
-import { cva, type VariantProps } from "class-variance-authority";
 import {
   Card,
   CardContent,
@@ -10,32 +9,19 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 
-// py-0
-const formCardVariants = cva(
-  "group relative w-full overflow-hidden py-0 shadow-none gap-4",
-  {
-    variants: {
-      variant: {
-        default: "",
-        destructive: "border-destructive",
-      },
-      defaultVariants: {
-        variant: "default",
-      },
-    },
-  },
-);
-
-// NOTE: Add a formcardprovider to share the variant prop
-
 export function FormCard({
   children,
   className,
-  variant,
   ...props
-}: React.ComponentProps<"div"> & VariantProps<typeof formCardVariants>) {
+}: React.ComponentProps<"div">) {
   return (
-    <Card className={cn(formCardVariants({ variant }), className)} {...props}>
+    <Card
+      className={cn(
+        "group relative w-full gap-4 overflow-hidden py-0 shadow-none",
+        className,
+      )}
+      {...props}
+    >
       {children}
     </Card>
   );
@@ -95,30 +81,17 @@ export function FormCardSeparator({
   return <Separator {...props} />;
 }
 
-const formCardFooterVariants = cva(
-  "border-t flex items-center gap-2 pb-4 px-4 [&>:last-child]:ml-auto [.border-t]:pt-4",
-  {
-    variants: {
-      variant: {
-        default: "",
-        destructive: "border-destructive bg-destructive/5",
-      },
-      defaultVariants: {
-        variant: "default",
-      },
-    },
-  },
-);
-
 export function FormCardFooter({
   children,
   className,
-  variant,
   ...props
-}: React.ComponentProps<"div"> & VariantProps<typeof formCardFooterVariants>) {
+}: React.ComponentProps<"div">) {
   return (
     <CardFooter
-      className={cn(formCardFooterVariants({ variant }), className)}
+      className={cn(
+        "flex items-center gap-2 border-t px-4 pb-4 [.border-t]:pt-4 [&>:last-child]:ml-auto",
+        className,
+      )}
       {...props}
     >
       {children}

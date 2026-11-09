@@ -24,6 +24,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useIsAdmin } from "@/providers/org-provider";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 
@@ -62,8 +63,7 @@ const STATUS_VARIANT: Record<
 
 export function PayrollRegister({ orgId }: { orgId: Id<"organizations"> }) {
   const periods = useQuery(api.payroll.periods.list, { orgId });
-  const me = useQuery(api.users.getMe, { orgId });
-  const isAdmin = me?.membership?.role === "admin";
+  const isAdmin = useIsAdmin();
 
   const createPeriod = useMutation(api.payroll.periods.createPeriod);
   const createRun = useMutation(api.payroll.runs.createRun);
@@ -213,13 +213,14 @@ export function PayrollRegister({ orgId }: { orgId: Id<"organizations"> }) {
                         {run.totals.employeeCount} payslip(s) · gross{" "}
                         {peso(run.totals.gross)} · net {peso(run.totals.net)}
                         {runDetail && runDetail.thirteenthMonthAccrued > 0 ? (
-                            <>
-                                {" "}
-                                · 13th month accrued {peso(runDetail.thirteenthMonthAccrued)}
-                            </>
+                          <>
+                            {" "}
+                            · 13th month accrued{" "}
+                            {peso(runDetail.thirteenthMonthAccrued)}
+                          </>
                         ) : null}
                         {runDetail && runDetail.loanDeductions > 0 ? (
-                            <> · loans {peso(runDetail.loanDeductions)}</>
+                          <> · loans {peso(runDetail.loanDeductions)}</>
                         ) : null}
                       </span>
                       {run.blocked.length > 0 && (

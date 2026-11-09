@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DAILY_RATE_BASES, WORK_WEEKS } from "@/lib/payroll";
+import { useIsAdmin } from "@/providers/org-provider";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 
@@ -24,13 +25,7 @@ const STATUTORY_BASES = [
   { value: "gross_taxable", label: "Gross taxable" },
 ] as const;
 
-export function FormPayrollSettings({
-  orgId,
-  isAdmin,
-}: {
-  orgId: Id<"organizations">;
-  isAdmin: boolean;
-}) {
+export function FormPayrollSettings({ orgId }: { orgId: Id<"organizations"> }) {
   const data = useQuery(api.payroll.settings.get, { orgId });
 
   if (data === undefined) {
@@ -46,7 +41,6 @@ export function FormPayrollSettings({
     <PayrollSettingsForm
       key={orgId}
       orgId={orgId}
-      isAdmin={isAdmin}
       settings={data.settings}
       isDefault={data.isDefault}
     />
@@ -63,15 +57,14 @@ type PayrollSettingsValues = {
 
 function PayrollSettingsForm({
   orgId,
-  isAdmin,
   settings,
   isDefault,
 }: {
   orgId: Id<"organizations">;
-  isAdmin: boolean;
   settings: PayrollSettingsValues;
   isDefault: boolean;
 }) {
+  const isAdmin = useIsAdmin();
   const save = useMutation(api.payroll.settings.update);
   const [isPending, startTransition] = useTransition();
 

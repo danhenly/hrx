@@ -26,10 +26,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { EmployeeWithPosition } from "@/data/employees";
+import { useIsAdmin } from "@/providers/org-provider";
 
 interface DataTableProps {
   data: EmployeeWithPosition[];
-  isAdmin: boolean;
   onEdit: (employee: EmployeeWithPosition) => void;
   onDelete: (employeeId: string) => Promise<void>;
 }
@@ -49,12 +49,8 @@ const statusVariants: Record<
   on_leave: "secondary",
 };
 
-export function EmployeeDataTable({
-  data,
-  isAdmin,
-  onEdit,
-  onDelete,
-}: DataTableProps) {
+export function EmployeeDataTable({ data, onEdit, onDelete }: DataTableProps) {
+  const isAdmin = useIsAdmin();
   const [isPending, startTransition] = useTransition();
 
   function handleDelete(employeeId: string, name: string) {
