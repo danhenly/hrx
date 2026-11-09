@@ -54,7 +54,7 @@ src/
     ui/               ← shadcn/ui primitives — do not modify directly
   providers/
     convex-provider.tsx ← ConvexClientProvider (client wrapper)
-  middleware.ts       ← Route protection via convexAuthNextjsMiddleware
+  proxy.ts            ← Route protection via convexAuthNextjsMiddleware (Next 16 name for middleware)
 ```
 
 ---
@@ -135,7 +135,7 @@ Do **not** use `@node-rs/argon2` or any other native module. The Convex bundler 
 | Group | Protection | Purpose |
 |---|---|---|
 | `(auth)` | Public | Sign-in, sign-up, invite |
-| `dashboard/` | Protected (middleware) | Main HRIS app |
+| `dashboard/` | Protected (proxy) | Main HRIS app |
 | `landing/` | Public | Marketing pages |
 | `status-page/` | Public | Public status pages |
 
@@ -156,9 +156,9 @@ import { api } from "../../convex/_generated/api"; // relative from file locatio
 
 The `api` object must be imported with a **relative path** from the file — not via `@/`. This is because it lives in `convex/`, not `src/`.
 
-### middleware.ts
+### proxy.ts
 
-Located at `src/middleware.ts`. Protected routes redirect to `/sign-in`. Authenticated users on `/sign-in` or `/sign-up` redirect to `/dashboard`. To add a new public route, add it to the `isPublicRoute` matcher array.
+Located at `src/proxy.ts` (Next 16 renamed the `middleware` file convention to `proxy`). Protected routes redirect to `/sign-in`. Authenticated users on `/sign-in` or `/sign-up` redirect to `/dashboard`. To add a new public route, add it to the `isPublicRoute` matcher array.
 
 ### Dashboard layout requirements
 

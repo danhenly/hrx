@@ -32,18 +32,18 @@ export const createDirectUser = action({
         const callerId = await getAuthUserId(ctx);
         if (!callerId) throw new ConvexError("Not authenticated");
 
-        const membership = await ctx.runQuery(internal.users._getMembership, {
-            userId: callerId,
-            orgId: args.orgId,
-        });
+        // Membership and the email-collision check are independent reads: start
+        // both, then gate in the same order so the error precedence is unchanged.
+        const [membership, existing] = await Promise.all([
+            ctx.runQuery(internal.users._getMembership, {
+                userId: callerId,
+                orgId: args.orgId,
+            }),
+            ctx.runQuery(internal.users._getUserByEmail, { email: args.email }),
+        ]);
         if (!membership || membership.role !== "admin") {
             throw new ConvexError("Admin role required");
         }
-
-        // Ensure email is not already taken
-        const existing = await ctx.runQuery(internal.users._getUserByEmail, {
-            email: args.email,
-        });
         if (existing) throw new ConvexError("A user with this email already exists");
 
         // Hash password using the same algorithm as the Password provider in auth.ts

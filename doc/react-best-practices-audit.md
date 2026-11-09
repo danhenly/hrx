@@ -3,7 +3,7 @@
 **Skill:** `vercel-react-best-practices` v1.0.0 (Vercel Engineering, MIT) — 70 rules, 8 categories
 **Commit:** `5c2ea7d` · **Stack:** Next.js 16.1.6 (App Router, Turbopack), React 19.2.3, Convex, Tailwind v4, Biome
 **Scope:** 131 `.ts/.tsx` files (26,775 lines incl. `convex/`), read-only static review
-**Fixes applied:** F1, F2, F3, F4, F6, F11, F13 (see status lines below). `tsc`, `biome lint` and `next build` run in CI (`.github/workflows/ci.yml`).
+**Fixes applied:** F1, F2, F3, F4, F6, F8, F11, F12, F13 (see status lines below). `tsc`, `biome lint` and `next build` run in CI (`.github/workflows/ci.yml`).
 **Not run:** `pnpm lint`, `pnpm tsc`, production build — host has 1.6 GB RAM and builds freeze it; CI owns those gates.
 
 ---
@@ -48,6 +48,7 @@ Default values are re-applied whenever `data` changes, so a settings refetch sil
 ### F5. The dashboard shell is a client component (server-serialization, async-suspense-boundaries)
 - `src/app/dashboard/layout.tsx:1` — `"use client"`; 15 of 23 `page.tsx` files are client too.
 
+> **Status: DEFERRED** — architectural; only worth it if route latency becomes a reported problem.
 Consequence: every dashboard route ships its JS first, then starts Convex queries after hydration — a JS → query waterfall instead of server-rendered data. This is a deliberate fit for the Convex client-query model, but it is the single biggest remaining latency lever: the shell (`OrgProvider`, `SidebarProvider`, `AppSidebar`) could stay server-rendered with only the interactive islands as client components.
 **Fix:** defer unless route latency is a real complaint; it is an architecture change, not a patch.
 
@@ -64,6 +65,7 @@ Removing or reordering an interval shifts values and focus to the neighbouring i
 - same file `:136` — `new Date().toISOString().slice(0,10)` inside JSX
 - `src/components/forms/employees/form-position-history.tsx:688` — `new Date().getFullYear()` in props
 
+> **Status: DEFERRED** — client components are SSR'd either way; a mount-effect fix trades a once-a-year mismatch for a permanent first-paint flicker.
 Client components are still server-rendered, so these can disagree across a midnight/year boundary and re-render with a different value.
 **Fix:** compute in an effect or `useState(() => ...)` on the client only, or pass the date from the server.
 
@@ -74,16 +76,19 @@ Client components are still server-rendered, so these can disagree across a midn
 ### F8. Sequential independent awaits (async-parallel)
 - `convex/actions.ts:35-50` — `_getMembership`, then `_getUserByEmail`, then `bcrypt.hash`.
 
+> **Status: FIXED** — membership and email lookups run in `Promise.all`, same error precedence.
 The two lookups are independent; `Promise.all` halves the round trips. Rare admin path, so low priority. Keep `bcrypt.hash` after the duplicate check.
 
 ### F9. Repeated `format()` per table row (js-cache-function-results)
 - `src/components/data-table/employees/data-table.tsx:134` and 3 other files call `format(new Date(x), "MMM d, yyyy")` inside `.map`.
 
+> **Status: DEFERRED** — the four call sites use three different formats (`PPP`, `yyyy-MM-dd HH:mm`, `MMM d, yyyy`); an `Intl` swap would change display semantics for no measurable gain.
 Minor; a module-level `Intl.DateTimeFormat` is cheaper and avoids re-parsing the pattern per row.
 
 ### F10. 20 declared dependencies with no import site (not a skill rule — bundle hygiene)
 `recharts`, `@dnd-kit/*` (4), `next-mdx-remote`, `sugar-high`, `react-medium-image-zoom`, `cmdk`, `@hookform/devtools`, `@date-fns/tz`, `@date-fns/utc`, and 8 `@radix-ui/react-*` packages are in `package.json` but never imported under `src/` or `convex/`. They cost install time, audit surface, and confuse bundle analysis. (`react-dom` is a false positive — Next uses it implicitly.)
 
+> **Status: BLOCKED** — removing deps needs `pnpm install` to refresh the lockfile, which this host cannot run.
 ### F11. Template leftovers (correctness, not performance)
 - `src/app/layout.tsx:48` — `<PlausibleProvider domain="template.openstatus.dev">`. Analytics from HRX is reported against the openstatus template domain, not HRX.
 - `src/components/feedback.tsx:53` — leftover `console.log(values)` in the submit path.
@@ -93,6 +98,7 @@ Minor; a module-level `Intl.DateTimeFormat` is cheaper and avoids re-parsing the
 - `src/middleware.ts` — renamed to `proxy.ts` in Next 16 (`v16.0.0` in the Next docs version history). Still works in 16.1.6 with a deprecation warning.
 **Fix:** `npx @next/codemod@latest middleware-to-proxy` (renames the file and the exported function), then re-run the route-protection tests.
 
+> **Status: FIXED** — file moved to `src/proxy.ts`; `AGENTS.md` updated to match.
 ### F13. `AGENTS.md` is out of date (docs drift that misleads agents)
 `AGENTS.md` states `next.config.ts` "currently has `output: "export"`" and warns to remove it before adding server features. The actual config is `output: "standalone"` with Turbopack filesystem caching. Any agent trusting the doc will reason from a false premise.
 
