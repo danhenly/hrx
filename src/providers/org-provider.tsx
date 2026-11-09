@@ -1,16 +1,17 @@
 "use client";
 
-import { api } from "../../convex/_generated/api";
-import type { Id } from "../../convex/_generated/dataModel";
 import { useQuery } from "convex/react";
 import {
-  type ReactNode,
   createContext,
+  type ReactNode,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
   useState,
 } from "react";
+import { api } from "../../convex/_generated/api";
+import type { Id } from "../../convex/_generated/dataModel";
 
 const STORAGE_KEY = "hrx.activeOrgId";
 
@@ -46,24 +47,23 @@ export function OrgProvider({ children }: { children: ReactNode }) {
     return orgs.find((o) => o.orgId === storedId) ?? orgs[0] ?? null;
   }, [orgs, storedId]);
 
-  const setActiveOrg = (orgId: Id<"organizations">) => {
+  const setActiveOrg = useCallback((orgId: Id<"organizations">) => {
     setStoredId(orgId);
     localStorage.setItem(STORAGE_KEY, orgId);
-  };
+  }, []);
 
-  return (
-    <OrgContext.Provider
-      value={{
-        orgs,
-        active,
-        orgId: active?.orgId,
-        role: active?.role,
-        setActiveOrg,
-      }}
-    >
-      {children}
-    </OrgContext.Provider>
+  const value = useMemo<OrgContextValue>(
+    () => ({
+      orgs,
+      active,
+      orgId: active?.orgId,
+      role: active?.role,
+      setActiveOrg,
+    }),
+    [orgs, active, setActiveOrg],
   );
+
+  return <OrgContext.Provider value={value}>{children}</OrgContext.Provider>;
 }
 
 export function useActiveOrg() {

@@ -30,6 +30,18 @@ export const metadata: Metadata = {
   },
 };
 
+/**
+ * Analytics is opt-in per deployment: without NEXT_PUBLIC_PLAUSIBLE_DOMAIN the
+ * app renders nothing rather than reporting to another site's domain.
+ */
+function Analytics({ children }: { children: React.ReactNode }) {
+  const domain = process.env.NEXT_PUBLIC_PLAUSIBLE_DOMAIN;
+  if (!domain) {
+    return <>{children}</>;
+  }
+  return <PlausibleProvider domain={domain}>{children}</PlausibleProvider>;
+}
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -45,7 +57,7 @@ export default function RootLayout({
             // Restores a stored sidebar width before first paint.
             dangerouslySetInnerHTML={{ __html: SIDEBAR_WIDTH_SCRIPT }}
           />
-          <PlausibleProvider domain="template.openstatus.dev">
+          <Analytics>
             <ThemeProvider
               attribute="class"
               defaultTheme="system"
@@ -58,7 +70,7 @@ export default function RootLayout({
                 <Toaster />
               </ConvexClientProvider>
             </ThemeProvider>
-          </PlausibleProvider>
+          </Analytics>
         </body>
       </html>
     </ConvexAuthNextjsServerProvider>
