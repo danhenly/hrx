@@ -183,16 +183,80 @@ export async function loadEmployeeContext(
     });
     if (resolved.issues.length > 0) return { unresolved: resolved.issues };
 
-    const entries = await ctx.db
-        .query("timeEntries")
-        .withIndex("by_org_employee_date", (q) =>
-            q
-                .eq("orgId", orgId)
-                .eq("employeeId", employeeId)
-                .gte("date", period.startDate)
-                .lte("date", period.endDate),
-        )
-        .collect();
+    // Nine independent per-employee reads; run them together. `positionRow` and
+    // `resolved` are settled first so an employee who is not in this run (or whose
+    // pay terms do not resolve) costs no queries at all.
+    const year = new Date(period.endDate + PH_OFFSET_MS).getUTCFullYear();
+    const [
+        entries,
+        catalogue,
+        adjustmentRows,
+        ids,
+        loanRows,
+        ledger,
+        leaveTypes,
+        leaveRequests,
+        leaveRows,
+    ] = await Promise.all([
+        ctx.db
+            .query("timeEntries")
+            .withIndex("by_org_employee_date", (q) =>
+                q
+                    .eq("orgId", orgId)
+                    .eq("employeeId", employeeId)
+                    .gte("date", period.startDate)
+                    .lte("date", period.endDate),
+            )
+            .collect(),
+        ctx.db
+            .query("allowanceTypes")
+            .withIndex("by_org", (q) => q.eq("orgId", orgId))
+            .collect(),
+        ctx.db
+            .query("adjustments")
+            .withIndex("by_org_target", (q) =>
+                q.eq("orgId", orgId).eq("targetPeriodId", period._id),
+            )
+            .collect(),
+        ctx.db
+            .query("employeeStatutoryIds")
+            .withIndex("by_org_employee", (q) =>
+                q.eq("orgId", orgId).eq("employeeId", employeeId),
+            )
+            .unique(),
+        ctx.db
+            .query("loanAccounts")
+            .withIndex("by_org_employee", (q) =>
+                q.eq("orgId", orgId).eq("employeeId", employeeId),
+            )
+            .collect(),
+        ctx.db
+            .query("thirteenthMonthLedger")
+            .withIndex("by_org_employee_year", (q) =>
+                q.eq("orgId", orgId).eq("employeeId", employeeId).eq("year", year),
+            )
+            .unique(),
+        ctx.db
+            .query("leaveTypes")
+            .withIndex("by_org", (q) => q.eq("orgId", orgId))
+            .collect(),
+        ctx.db
+            .query("leaveRequests")
+            .withIndex("by_org_employee", (q) =>
+                q.eq("orgId", orgId).eq("employeeId", employeeId),
+            )
+            .collect(),
+        // PREFIX query on `by_org_employee_period`: this employee's ledger rows only.
+        // The old `by_org` read scanned the ENTIRE org's leave history once per
+        // employee, so every head in a run re-read every other head's rows.
+        ctx.db
+            .query("leaveLedger")
+            .withIndex("by_org_employee_period", (q) =>
+                q.eq("orgId", orgId).eq("employeeId", employeeId),
+            )
+            .collect(),
+    ]);
+
     const included = entries.filter(
         (entry) => entry.status === "approved" || entry.status === "locked",
     );
@@ -209,22 +273,12 @@ export async function loadEmployeeContext(
             status: entry.status,
         }));
 
-    const catalogue = await ctx.db
-        .query("allowanceTypes")
-        .withIndex("by_org", (q) => q.eq("orgId", orgId))
-        .collect();
     const unitByCode = new Map(catalogue.map((row) => [row.code, row.unit]));
     const allowances: Allowance[] = resolved.terms.allowances.map((allowance) => ({
         ...allowance,
         unit: unitByCode.get(allowance.code) ?? "monthly",
     }));
 
-    const adjustmentRows = await ctx.db
-        .query("adjustments")
-        .withIndex("by_org_target", (q) =>
-            q.eq("orgId", orgId).eq("targetPeriodId", period._id),
-        )
-        .collect();
     const adjustments: Adjustment[] = adjustmentRows
         .filter((row) => row.employeeId === employeeId)
         .map((row) => ({
@@ -234,23 +288,11 @@ export async function loadEmployeeContext(
             reason: row.reason,
         }));
 
-    const ids = await ctx.db
-        .query("employeeStatutoryIds")
-        .withIndex("by_org_employee", (q) =>
-            q.eq("orgId", orgId).eq("employeeId", employeeId),
-        )
-        .unique();
     const missingIds: string[] = [];
     if (!ids?.sssNumber) missingIds.push("sssNumber");
     if (!ids?.philhealthNumber) missingIds.push("philhealthNumber");
     if (!ids?.pagibigNumber) missingIds.push("pagibigNumber");
 
-    const loanRows = await ctx.db
-        .query("loanAccounts")
-        .withIndex("by_org_employee", (q) =>
-            q.eq("orgId", orgId).eq("employeeId", employeeId),
-        )
-        .collect();
     const loans: LoanState[] = loanRows
         .filter((row) => row.status === "active" && row.balance > 0)
         .map((row) => ({
@@ -260,14 +302,6 @@ export async function loadEmployeeContext(
             amortisationCentavos: Math.round(row.amortisation * 100),
             reference: row.reference,
         }));
-
-    const year = new Date(period.endDate + PH_OFFSET_MS).getUTCFullYear();
-    const ledger = await ctx.db
-        .query("thirteenthMonthLedger")
-        .withIndex("by_org_employee_year", (q) =>
-            q.eq("orgId", orgId).eq("employeeId", employeeId).eq("year", year),
-        )
-        .unique();
 
     // Final period? A position row that ENDS inside this period is a separation, and
     // final pay applies to it. SIL is 5 days per completed year of service when the
@@ -283,10 +317,6 @@ export async function loadEmployeeContext(
 
     // P8.4: approved paid leave. Unpaid leave is deliberately NOT collected — it must
     // stay an absence so the D18 deduction applies.
-    const leaveTypes = await ctx.db
-        .query("leaveTypes")
-        .withIndex("by_org", (q) => q.eq("orgId", orgId))
-        .collect();
     const paidTypeIds = new Set(
         leaveTypes.filter((type) => type.paid).map((type) => String(type._id)),
     );
@@ -295,12 +325,7 @@ export async function loadEmployeeContext(
     );
 
     const DAY_MS = 24 * 60 * 60 * 1000;
-    const approvedLeave = (
-        await ctx.db
-            .query("leaveRequests")
-            .withIndex("by_org_employee", (q) => q.eq("orgId", orgId).eq("employeeId", employeeId))
-            .collect()
-    ).filter((request) => request.status === "approved");
+    const approvedLeave = leaveRequests.filter((request) => request.status === "approved");
 
     const paidLeaveDates: number[] = [];
     for (const request of approvedLeave) {
@@ -313,16 +338,9 @@ export async function loadEmployeeContext(
     }
 
     // P8.5: the SIL balance is now a LEDGER FACT, not "5 days per year of service".
-    const leaveRows = (
-        await ctx.db
-            .query("leaveLedger")
-            .withIndex("by_org", (q) => q.eq("orgId", orgId))
-            .collect()
-    ).filter(
-        (row) => row.employeeId === employeeId && convertibleCodes.has(row.leaveCode),
-    );
+    const convertibleRows = leaveRows.filter((row) => convertibleCodes.has(row.leaveCode));
     const convertibleBalanceDays = roundDays(
-        leaveRows.reduce(
+        convertibleRows.reduce(
             (total, row) =>
                 leaveBalance({
                     accruedDays: row.accruedDays,
