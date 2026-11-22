@@ -358,6 +358,10 @@ const handlers = {
         const result = {
             dailyCentavos: rates.dailyRateCentavos(terms),
             hourlyCentavos: rates.hourlyRateCentavos(terms),
+            // The gross annual figure D15 stores alongside the rate. A monthly
+            // divisor ("22"/"26") annualises as divisor x 12, so this catches a
+            // rate/divisor pair that disagrees about the shape of a year.
+            annual: rates.annualSalaryFor(terms),
         };
         // `derivation` is the payslip-footer string D7 requires; only assert it
         // when the fixture states it (it is prose, so exact match is the point).

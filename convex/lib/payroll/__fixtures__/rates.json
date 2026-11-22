@@ -267,6 +267,123 @@
         "dailyRateBasis": "313",
         "issueCount": 1
       }
+    },
+    {
+      "name": "monthly-divisor-22: 22,000/month over 22 paid days is 1,000.00/day \u2014 NOT annualised by 12",
+      "kind": "dailyRate",
+      "input": {
+        "terms": {
+          "payType": "monthly",
+          "basicRate": 22000,
+          "dailyRateBasis": "22",
+          "workWeek": "6_day",
+          "statutoryBasis": "basic",
+          "allowances": []
+        }
+      },
+      "expect": {
+        "dailyCentavos": 100000,
+        "hourlyCentavos": 12500,
+        "annual": 264000,
+        "derivation": "PHP 22000.00/month \u00f7 22 = PHP 1000.00/day"
+      }
+    },
+    {
+      "name": "monthly-divisor-26: 22,000/month over 26 paid days is 846.15/day",
+      "kind": "dailyRate",
+      "input": {
+        "terms": {
+          "payType": "monthly",
+          "basicRate": 22000,
+          "dailyRateBasis": "26",
+          "workWeek": "6_day",
+          "statutoryBasis": "basic",
+          "allowances": []
+        }
+      },
+      "expect": {
+        "dailyCentavos": 84615,
+        "hourlyCentavos": 10577,
+        "annual": 264000,
+        "derivation": "PHP 22000.00/month \u00f7 26 = PHP 846.15/day"
+      }
+    },
+    {
+      "name": "daily-22: a 645.00 daily rate on a 22-day month annualises as 22 x 12 = 264 days",
+      "kind": "dailyRate",
+      "input": {
+        "terms": {
+          "payType": "daily",
+          "basicRate": 645,
+          "dailyRateBasis": "22",
+          "workWeek": "5_day",
+          "statutoryBasis": "basic",
+          "allowances": []
+        }
+      },
+      "expect": {
+        "dailyCentavos": 64500,
+        "hourlyCentavos": 8063,
+        "annual": 170280
+      }
+    },
+    {
+      "name": "daily-26: a 645.00 daily rate on a 26-day month annualises as 26 x 12 = 312 days",
+      "kind": "dailyRate",
+      "input": {
+        "terms": {
+          "payType": "daily",
+          "basicRate": 645,
+          "dailyRateBasis": "26",
+          "workWeek": "6_day",
+          "statutoryBasis": "basic",
+          "allowances": []
+        }
+      },
+      "expect": {
+        "dailyCentavos": 64500,
+        "hourlyCentavos": 8063,
+        "annual": 201240
+      }
+    },
+    {
+      "name": "hourly-22: 100.00/hour over 8 hours and 264 annual days is 211,200/year",
+      "kind": "dailyRate",
+      "input": {
+        "terms": {
+          "payType": "hourly",
+          "basicRate": 100,
+          "dailyRateBasis": "22",
+          "workWeek": "6_day",
+          "statutoryBasis": "basic",
+          "allowances": []
+        }
+      },
+      "expect": {
+        "dailyCentavos": 80000,
+        "hourlyCentavos": 10000,
+        "annual": 211200
+      }
+    },
+    {
+      "name": "annual-divisor-313 unchanged: 22,000/month over 313 still annualises x 12 before dividing",
+      "kind": "dailyRate",
+      "input": {
+        "terms": {
+          "payType": "monthly",
+          "basicRate": 22000,
+          "dailyRateBasis": "313",
+          "workWeek": "6_day",
+          "statutoryBasis": "basic",
+          "allowances": []
+        }
+      },
+      "expect": {
+        "dailyCentavos": 84345,
+        "hourlyCentavos": 10543,
+        "annual": 264000,
+        "derivation": "PHP 22000.00/month \u00d7 12 \u00f7 313 = PHP 843.45/day"
+      }
     }
   ]
 }
