@@ -5,8 +5,10 @@ import type { Id } from "../_generated/dataModel";
 import { logAudit } from "../audit";
 import { requireAdmin, requireAuth, requireMembership } from "../helpers";
 import {
+    applyLedgerDelta,
     mergeOpeningBalance,
-    toOpeningBalance,
+    openingLedgerDelta,
+    roundPesos,
     validateOpeningRow,
     type OpeningRowInput,
 } from "../lib/payroll/openingBalances";
@@ -16,7 +18,9 @@ import {
  *
  * Import is an upsert per employee per year and is REFUSED row by row rather than in
  * bulk: one bad row must not silently drop the rest, and a skipped row is reported so
- * the operator can fix and re-import it.
+ * the operator can fix and re-import it. Because the operator WILL re-import corrected
+ * files, the 13th-month ledger moves by the DIFFERENCE a row makes, never by its full
+ * figure — importing the same CSV twice changes nothing.
  */
 
 const rowValidator = v.object({
@@ -88,6 +92,10 @@ export const importBalances = mutation({
                 )
                 .unique();
 
+            // The ledger moves by what this row CHANGES, so the previous contribution
+            // has to be read before the upsert overwrites it.
+            const prevThirteenth = existing?.thirteenthMonthPesos ?? 0;
+
             const values = {
                 grossPesos: row.gross,
                 taxablePesos: row.taxable,
@@ -111,31 +119,43 @@ export const importBalances = mutation({
             }
 
             // The 13th month already paid must also stop the December run releasing it
-            // again, and must consume the ₱90,000 ceiling it already used.
+            // again, and must consume the ₱90,000 ceiling it already used — but only
+            // the part of that figure THIS import added, or a re-import would double-count
+            // both the payout and the ceiling usage.
             const ledger = await ctx.db
                 .query("thirteenthMonthLedger")
                 .withIndex("by_org_employee_year", (q) =>
                     q.eq("orgId", args.orgId).eq("employeeId", employee._id).eq("year", args.year),
                 )
                 .unique();
-            const ceiling = await exemptCeilingCentavos(ctx);
-            const opening = toOpeningBalance(String(employee._id), row);
-            const alreadyExempt = Math.min(opening.thirteenthMonthCentavos, ceiling);
+            const delta = openingLedgerDelta({
+                prevThirteenthPesos: prevThirteenth,
+                nextThirteenthPesos: row.thirteenthMonth,
+                exemptCeilingCentavos: await exemptCeilingCentavos(ctx),
+            });
+            const movesLedger = delta.paidDelta !== 0 || delta.exemptDelta !== 0;
             if (ledger) {
-                await ctx.db.patch(ledger._id, {
-                    paid: Math.round((ledger.paid + row.thirteenthMonth) * 100) / 100,
-                    exemptUsed:
-                        Math.round((ledger.exemptUsed + alreadyExempt / 100) * 100) / 100,
-                    updatedAt: Date.now(),
-                });
+                // Nothing to move means the row already says this figure: leave the row
+                // (and its updatedAt) untouched so a re-import is provably a no-op.
+                if (movesLedger) {
+                    await ctx.db.patch(ledger._id, {
+                        ...applyLedgerDelta({
+                            paid: ledger.paid,
+                            exemptUsed: ledger.exemptUsed,
+                            paidDelta: delta.paidDelta,
+                            exemptDelta: delta.exemptDelta,
+                        }),
+                        updatedAt: Date.now(),
+                    });
+                }
             } else if (row.thirteenthMonth > 0) {
                 await ctx.db.insert("thirteenthMonthLedger", {
                     orgId: args.orgId,
                     employeeId: employee._id,
                     year: args.year,
                     accrued: 0,
-                    paid: Math.round(row.thirteenthMonth * 100) / 100,
-                    exemptUsed: Math.round((alreadyExempt / 100) * 100) / 100,
+                    paid: roundPesos(row.thirteenthMonth),
+                    exemptUsed: roundPesos(delta.nextExemptCentavos / 100),
                     updatedAt: Date.now(),
                 });
             }
@@ -198,6 +218,36 @@ export const deleteBalance = mutation({
         const row = await ctx.db.get(args.id);
         if (!row || row.orgId !== args.orgId) throw new ConvexError("Opening balance not found");
         await ctx.db.delete(row._id);
+
+        // Reverse the deleted figure's contribution: a wrong row must not keep
+        // suppressing the December payout or keep consuming ceiling it no longer stands
+        // for. Only this import's share is subtracted, so the register's own accrual and
+        // payout in the same ledger row survive.
+        if (row.thirteenthMonthPesos > 0) {
+            const ledger = await ctx.db
+                .query("thirteenthMonthLedger")
+                .withIndex("by_org_employee_year", (q) =>
+                    q.eq("orgId", args.orgId).eq("employeeId", row.employeeId).eq("year", row.year),
+                )
+                .unique();
+            if (ledger) {
+                const delta = openingLedgerDelta({
+                    prevThirteenthPesos: row.thirteenthMonthPesos,
+                    nextThirteenthPesos: 0,
+                    exemptCeilingCentavos: await exemptCeilingCentavos(ctx),
+                });
+                await ctx.db.patch(ledger._id, {
+                    ...applyLedgerDelta({
+                        paid: ledger.paid,
+                        exemptUsed: ledger.exemptUsed,
+                        paidDelta: delta.paidDelta,
+                        exemptDelta: delta.exemptDelta,
+                    }),
+                    updatedAt: Date.now(),
+                });
+            }
+        }
+
         await logAudit(ctx, {
             orgId: args.orgId,
             actorId: userId,
