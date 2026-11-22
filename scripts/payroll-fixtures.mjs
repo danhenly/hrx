@@ -138,6 +138,30 @@ const handlers = {
     },
 
     opening(input) {
+        if (input.op === "ledgerImport") {
+            // Replay a sequence of imports against ONE employee-year: the stored opening
+            // figure and the ledger row carry over, which is exactly the re-import bug.
+            // Each import may only MOVE the ledger by its delta, never add its full figure.
+            let stored = input.startOpening ?? 0;
+            let ledger = { paid: input.startPaid ?? 0, exemptUsed: input.startExemptUsed ?? 0 };
+            const steps = [];
+            for (const next of input.imports) {
+                const delta = openingLib.openingLedgerDelta({
+                    prevThirteenthPesos: stored,
+                    nextThirteenthPesos: next,
+                    exemptCeilingCentavos: input.ceiling ?? 9000000,
+                });
+                ledger = openingLib.applyLedgerDelta({ ...ledger, ...delta });
+                stored = next;
+                steps.push(ledger);
+            }
+            return {
+                paid: ledger.paid,
+                exemptUsed: ledger.exemptUsed,
+                afterFirstPaid: steps[0]?.paid ?? 0,
+                afterFirstExempt: steps[0]?.exemptUsed ?? 0,
+            };
+        }
         const check = openingLib.validateOpeningRow({
             email: input.email,
             employeeId: input.employeeId,

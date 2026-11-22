@@ -127,6 +127,122 @@
         "ok": true,
         "errors": 0
       }
+    },
+    {
+      "name": "re-importing the same 13th month figure twice leaves the ledger unchanged",
+      "kind": "opening",
+      "input": {
+        "op": "ledgerImport",
+        "startOpening": 0,
+        "imports": [
+          50000,
+          50000
+        ]
+      },
+      "expect": {
+        "paid": 50000,
+        "exemptUsed": 50000,
+        "afterFirstPaid": 50000,
+        "afterFirstExempt": 50000
+      }
+    },
+    {
+      "name": "a corrected 13th month moves the ledger instead of stacking on the old figure",
+      "kind": "opening",
+      "input": {
+        "op": "ledgerImport",
+        "startOpening": 50000,
+        "imports": [
+          40000
+        ],
+        "startPaid": 50000,
+        "startExemptUsed": 50000
+      },
+      "expect": {
+        "paid": 40000,
+        "exemptUsed": 40000
+      }
+    },
+    {
+      "name": "an opening 13th month above the ceiling consumes only the ceiling",
+      "kind": "opening",
+      "input": {
+        "op": "ledgerImport",
+        "startOpening": 0,
+        "imports": [
+          100000
+        ]
+      },
+      "expect": {
+        "paid": 100000,
+        "exemptUsed": 90000
+      }
+    },
+    {
+      "name": "lowering a figure that still sits above the ceiling frees no exempt room",
+      "kind": "opening",
+      "input": {
+        "op": "ledgerImport",
+        "startOpening": 100000,
+        "imports": [
+          95000
+        ],
+        "startPaid": 100000,
+        "startExemptUsed": 90000
+      },
+      "expect": {
+        "paid": 95000,
+        "exemptUsed": 90000
+      }
+    },
+    {
+      "name": "dropping below the ceiling claws the exempt usage back",
+      "kind": "opening",
+      "input": {
+        "op": "ledgerImport",
+        "startOpening": 100000,
+        "imports": [
+          60000
+        ],
+        "startPaid": 100000,
+        "startExemptUsed": 90000
+      },
+      "expect": {
+        "paid": 60000,
+        "exemptUsed": 60000
+      }
+    },
+    {
+      "name": "deleting the opening row reverses only its share and keeps the register's payout",
+      "kind": "opening",
+      "input": {
+        "op": "ledgerImport",
+        "startOpening": 50000,
+        "imports": [
+          0
+        ],
+        "startPaid": 120000,
+        "startExemptUsed": 90000
+      },
+      "expect": {
+        "paid": 70000,
+        "exemptUsed": 40000
+      }
+    },
+    {
+      "name": "a reversal never drives the ledger negative",
+      "kind": "opening",
+      "input": {
+        "op": "ledgerImport",
+        "startOpening": 50000,
+        "imports": [
+          0
+        ]
+      },
+      "expect": {
+        "paid": 0,
+        "exemptUsed": 0
+      }
     }
   ]
 }

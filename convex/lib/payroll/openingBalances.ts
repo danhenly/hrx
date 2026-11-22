@@ -35,6 +35,11 @@ export interface OpeningValidation {
 
 const centavos = (pesos: number) => Math.round(pesos * 100);
 
+/** Pesos rounded to the centavo (2dp), half-up on the magnitude. */
+export function roundPesos(pesos: number): number {
+    return Math.sign(pesos) * (Math.round(Math.abs(pesos) * 100) / 100);
+}
+
 /** Row-level checks. A bad import is worse than no import, so this is strict. */
 export function validateOpeningRow(row: OpeningRowInput): OpeningValidation {
     const errors: string[] = [];
@@ -81,6 +86,64 @@ export function toOpeningBalance(employeeId: string, row: OpeningRowInput): Open
         taxableCentavos: centavos(row.taxable),
         taxWithheldCentavos: centavos(row.taxWithheld),
         thirteenthMonthCentavos: centavos(row.thirteenthMonth),
+    };
+}
+
+/**
+ * The 13th-month ledger movement one opening balance causes, as a DELTA against what
+ * the row already said.
+ *
+ * `importBalances` is an upsert per (org, employee, year), so a corrected CSV must
+ * MOVE the figure the employee already had rather than add a second copy of it:
+ * re-importing the same file yields a zero delta, and importing a smaller figure
+ * claws the difference back. Only the part under the ceiling is exempt (A14: the
+ * opening 13th month consumes the ceiling first), so the delta is computed on the
+ * capped amounts, never on the raw pesos.
+ */
+export function openingLedgerDelta(args: {
+    /** `thirteenthMonthPesos` already stored for this employee-year; 0 when new. */
+    prevThirteenthPesos: number;
+    /** The figure being imported now. */
+    nextThirteenthPesos: number;
+    exemptCeilingCentavos: Money;
+}): {
+    paidDelta: number;
+    exemptDelta: number;
+    prevExemptCentavos: Money;
+    nextExemptCentavos: Money;
+} {
+    const prevExemptCentavos = Math.min(
+        centavos(args.prevThirteenthPesos),
+        args.exemptCeilingCentavos,
+    );
+    const nextExemptCentavos = Math.min(
+        centavos(args.nextThirteenthPesos),
+        args.exemptCeilingCentavos,
+    );
+    return {
+        paidDelta: roundPesos(args.nextThirteenthPesos - args.prevThirteenthPesos),
+        exemptDelta: roundPesos((nextExemptCentavos - prevExemptCentavos) / 100),
+        prevExemptCentavos,
+        nextExemptCentavos,
+    };
+}
+
+/**
+ * Apply a delta to a 13th-month ledger row, clamped at zero.
+ *
+ * The ledger also carries the register's own accrual and payout, so a reversal may
+ * only ever subtract this import's share of `paid` / `exemptUsed`; the clamp is the
+ * safeguard against a corrected figure driving the row negative.
+ */
+export function applyLedgerDelta(args: {
+    paid: number;
+    exemptUsed: number;
+    paidDelta: number;
+    exemptDelta: number;
+}): { paid: number; exemptUsed: number } {
+    return {
+        paid: Math.max(0, roundPesos(args.paid + args.paidDelta)),
+        exemptUsed: Math.max(0, roundPesos(args.exemptUsed + args.exemptDelta)),
     };
 }
 
