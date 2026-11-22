@@ -182,6 +182,20 @@ export async function generateBankFileCore(
         const reference = `RUN-${runId}-v${run.version}`;
         const { rows, missing, total } = await disbursementRows(ctx, orgId, runId, reference);
 
+        // Name the employees the file would leave out BEFORE the totals are compared:
+        // an omitted row only surfaces as a net-total mismatch, which reads as a broken
+        // register rather than "these people have no bank account".
+        if (missing.length > 0) {
+            const listed = missing
+                .slice(0, 5)
+                .map((row) => row.reason)
+                .join("; ");
+            const rest = missing.length > 5 ? `; ...and ${missing.length - 5} more` : "";
+            throw new ConvexError(
+                `${missing.length} employee(s) have no bank account, so the bank file cannot cover the run's net pay: ${listed}${rest}. Add their bank details under Employees > Government & Bank, then generate the file again.`,
+            );
+        }
+
         const file = renderBankFile({ layout, rows, runId, version: run.version });
 
         // The register's net total and the file's total must agree to the centavo.
