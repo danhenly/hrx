@@ -101,12 +101,22 @@ export async function loadGovForms(
     const period = await ctx.db.get(run.periodId);
     if (!period) throw new ConvexError("Period not found");
 
-    const [payslips, snapshot] = await Promise.all([
+    const [payslips, snapshot, lines, employees, statutoryIdRows] = await Promise.all([
         ctx.db.query("payslips").withIndex("by_run", (q) => q.eq("runId", runId)).collect(),
         // ONE snapshot is enough, and reading all of them would drag a whole run's
         // day records through the mutation. Every payslip of a run recorded the
         // same tables — the ones in force at the period end when it was computed.
         ctx.db.query("payrollInputs").withIndex("by_run", (q) => q.eq("runId", runId)).first(),
+        ctx.db.query("payslipLines").withIndex("by_run", (q) => q.eq("runId", runId)).collect(),
+        // Names and government references are read ONCE for the whole run. They
+        // used to be two sequential reads per payslip — `db.get(employeeId)` plus
+        // an `employeeStatutoryIds.unique()` — which is 2,400+ round trips on a
+        // 1,200-head run. Both tables are org-scoped, so one read serves every row.
+        ctx.db.query("employees").withIndex("by_org", (q) => q.eq("orgId", orgId)).collect(),
+        ctx.db
+            .query("employeeStatutoryIds")
+            .withIndex("by_org_employee", (q) => q.eq("orgId", orgId))
+            .collect(),
     ]);
     const snapshottedTables = snapshot?.tableIds;
 
@@ -117,10 +127,10 @@ export async function loadGovForms(
         tableVersion(ctx, "tax", period.endDate, snapshottedTables?.tax),
     ]);
 
-    const lines = await ctx.db
-        .query("payslipLines")
-        .withIndex("by_run", (q) => q.eq("runId", runId))
-        .collect();
+    // Keyed by String(id) because a Convex Id is not a stable Map key across the
+    // values the compiler narrows here; every lookup below goes through String() too.
+    const employeeById = new Map(employees.map((employee) => [String(employee._id), employee]));
+    const idsByEmployee = new Map(statutoryIdRows.map((row) => [String(row.employeeId), row]));
 
     // One bucket per payslip — the bucketing itself is pure and fixture-tested.
     const buckets = bucketLines(
@@ -149,13 +159,8 @@ export async function loadGovForms(
     for (const slip of payslips) {
         const bucket = buckets[String(slip._id)];
         if (!bucket) continue;
-        const employee = await ctx.db.get(slip.employeeId);
-        const ids = await ctx.db
-            .query("employeeStatutoryIds")
-            .withIndex("by_org_employee", (q) =>
-                q.eq("orgId", orgId).eq("employeeId", slip.employeeId),
-            )
-            .unique();
+        const employee = employeeById.get(String(slip.employeeId));
+        const ids = idsByEmployee.get(String(slip.employeeId));
         const name = employee
             ? `${employee.lastName}, ${employee.firstName}`
             : String(slip.employeeId);
