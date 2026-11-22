@@ -692,6 +692,69 @@
         "registerGross": 1950000,
         "registerTaxable": 1950000
       }
+    },
+    {
+      "name": "a 2027 schedule does not restamp a 2026 run, and the date is the Manila date",
+      "kind": "govTableVersion",
+      "input": {
+        "kind": "sss",
+        "at": 1795968000000,
+        "rows": [
+          { "label": "2026", "effectiveFrom": 1767196800000 },
+          { "label": "2027", "effectiveFrom": 1798732800000 }
+        ]
+      },
+      "expect": {
+        "matched": "2026",
+        "version": "sss@2026-01-01"
+      }
+    },
+    {
+      "name": "no row in force at the period end stamps @unseeded, never the future row",
+      "kind": "govTableVersion",
+      "input": {
+        "kind": "philhealth",
+        "at": 1795968000000,
+        "rows": [
+          { "label": "2027", "effectiveFrom": 1798732800000 }
+        ]
+      },
+      "expect": {
+        "matched": null,
+        "version": "philhealth@unseeded"
+      }
+    },
+    {
+      "name": "a later period picks the later schedule",
+      "kind": "govTableVersion",
+      "input": {
+        "kind": "sss",
+        "at": 1802620800000,
+        "rows": [
+          { "label": "2026", "effectiveFrom": 1767196800000 },
+          { "label": "2027", "effectiveFrom": 1798732800000 }
+        ]
+      },
+      "expect": {
+        "matched": "2027",
+        "version": "sss@2027-01-01"
+      }
+    },
+    {
+      "name": "a row closed by effectiveTo no longer applies",
+      "kind": "govTableVersion",
+      "input": {
+        "kind": "tax",
+        "at": 1780243200000,
+        "rows": [
+          { "label": "2025", "effectiveFrom": 1735660800000, "effectiveTo": 1767196800000 },
+          { "label": "2026", "effectiveFrom": 1767196800000 }
+        ]
+      },
+      "expect": {
+        "matched": "2026",
+        "version": "tax@2026-01-01"
+      }
     }
   ]
 }
