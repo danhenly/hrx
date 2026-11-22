@@ -10,7 +10,9 @@ import {
     renderRegisterCsv,
     type DisbursementRow,
 } from "../lib/payroll/bankFiles";
+import type { GovFormId } from "../lib/payroll/govForms";
 import { sha256Hex } from "../lib/payroll/sha256";
+import { loadGovForms } from "./govReports";
 
 /**
  * Money out (P4.1/P4.2).
@@ -362,10 +364,32 @@ export const generateBankFile = mutation({
     },
 });
 
+type LoadedGovForms = Awaited<ReturnType<typeof loadGovForms>>;
+
 /**
- * The run pack (P4.2): register CSV + bank file + a payslip index, in one download.
- * The government schedules are P6 and are omitted with a visible note rather than a
- * section that looks broken.
+ * One line per government schedule (P6) for the pack. The full CSV — column layout,
+ * omitted columns and notes — is the separate `gov_schedule` artefact, so the pack
+ * carries the version stamp and remittance figures instead of restating every row.
+ */
+function govFormSummaryLines(loaded: LoadedGovForms): string[] {
+    const money = (centavos: number) => (centavos / 100).toFixed(2);
+    const { totals } = loaded;
+    const figures: Record<GovFormId, string> = {
+        sss_r3: `employee ${money(totals.sssEmployee)}  employer ${money(totals.sssEmployer)}  EC ${money(totals.sssEc)}`,
+        philhealth_rf1: `employee ${money(totals.philhealthEmployee)}  employer ${money(totals.philhealthEmployer)}`,
+        pagibig_mcrf: `employee ${money(totals.pagibigEmployee)}  employer ${money(totals.pagibigEmployer)}`,
+        bir_1601c: `tax withheld ${money(totals.tax)}`,
+    };
+    return loaded.forms.map(
+        (form) =>
+            `${form.title} | ${form.tableVersion} | ${form.rows.length} employee(s)\r\n  ${figures[form.id]}`,
+    );
+}
+
+/**
+ * The run pack (P4.2): register CSV + bank file + the government-schedule summary, in
+ * one download. The summary (P6) names each form's version stamp and remittance
+ * figures; the per-agency CSVs are stored separately by `generateGovForms`.
  */
 export async function generateRunPackCore(
     ctx: MutationCtx,
@@ -430,6 +454,7 @@ export async function generateRunPackCore(
                   version: run.version,
               })
             : null;
+        const govForms = await loadGovForms(ctx, { orgId, runId });
 
         const day = (ms: number) => new Date(ms + 8 * 3_600_000).toISOString().slice(0, 10);
         const header = [
@@ -442,7 +467,6 @@ export async function generateRunPackCore(
             `gross: ${run.totals.gross.toFixed(2)}  deductions: ${run.totals.deductions.toFixed(2)}  net: ${run.totals.net.toFixed(2)}`,
             `employer cost: ${run.totals.employerCost.toFixed(2)}`,
             "",
-            `NOTE: the SSS R-3 / PhilHealth EPRS / Pag-IBIG MCRF / BIR 1601-C schedules are P6 and are NOT in this pack.`,
             missing.length > 0
                 ? `WARNING: ${missing.length} employee(s) have no bank account: ${missing.map((row) => row.reason).join("; ")}`
                 : "All employees have a bank account.",
@@ -452,6 +476,11 @@ export async function generateRunPackCore(
             "",
             "== BANK FILE (generic) ==",
             bank ? bank.content.trimEnd() : "(not generated)",
+            "",
+            "== GOVERNMENT SCHEDULES ==",
+            ...govFormSummaryLines(govForms),
+            "",
+            "Figures are the amounts this register booked, not a re-computation. Generate government schedules to store each agency's full CSV.",
         ].join("\r\n");
 
         const content = `${header}\r\n`;
