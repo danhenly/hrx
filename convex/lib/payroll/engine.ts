@@ -1,14 +1,15 @@
 // The payroll engine (§6.1, §6.2).
 //
-// P1 computes EARNINGS: basic pay for the period, the day-by-day prices (holiday,
-// rest day, OT, night differential), allowances with the de minimis split, and
-// adjustments. Statutory contributions, withholding tax, loans and 13th month are
-// P2/P5 and are NOT here.
+// Earnings: basic pay for the period, the day-by-day prices (holiday, rest day, OT,
+// night differential), allowances with the de minimis split, and adjustments (P1).
+// Deductions: SSS with the MPF split + EC, PhilHealth, Pag-IBIG and withholding tax
+// (P2); loans, the 13th-month accrual/payout and final pay (P5). An approved PAID
+// leave day is priced as a worked day (P8.4). Nothing is staged behind a pending
+// flag any more — a payslip's net pay already carries every deduction.
 //
-// Because the deductions do not exist yet, every result is BLOCKED with
-// `STATUTORY_PENDING`: the preview can show earnings, but nothing may persist a
-// payslip whose net pay is missing every statutory deduction. That flag is what
-// keeps a P1 preview from becoming a P1 payroll run.
+// The run owns persistence and the ledgers. This module prices only what the caller
+// hands it — leave dates, loan state, 13th-month ledger figures, the separation
+// window — and returns the §6.1 PayResult the payslip is written from.
 //
 // Pure: no ctx, no DB, no generated types — exercises under plain node.
 import { ConvexError } from "convex/values";
@@ -58,9 +59,6 @@ import type {
 /** Bumped when the engine's behaviour changes; recorded per run in P3. */
 export const ENGINE_STAGE = "P5-13th-finalpay-loans";
 
-/** What is still missing before a payslip may be persisted (P5: loans, 13th month). */
-
-
 /** A semi-monthly period is half a month — the conversion for monthly amounts. */
 const PERIODS_PER_YEAR = 24;
 /** Semi-monthly periods in one de minimis ceiling period. */
@@ -105,7 +103,7 @@ export type ComputePayslipArgs = {
         /** Manila midnight of the last day worked. */
         lastDay: number;
         reason: string;
-        /** Unused SIL days, entered by HR — HRX has no leave module to derive it. */
+        /** Unused SIL days — the leave ledger's convertible balance (P8.5). */
         silDaysUnpaid?: number;
         /** Years of service, used for the SIL entitlement floor (Art. 95). */
         yearsOfService?: number;
@@ -335,9 +333,9 @@ export function computePayslip(args: ComputePayslipArgs): PayResult {
     if (args.separation) {
         const dailyCentavos = dailyRateCentavos(profile);
         const silDays = args.separation.silDaysUnpaid ?? 0;
-        // Art. 95: SIL accrues after a year of service. HRX has no leave ledger, so
-        // the unused days are an input, not a guess — and days entered without the
-        // service floor are refused rather than paid.
+        // Art. 95: SIL accrues after a year of service. The unused days come from the
+        // caller — the leave ledger's convertible balance (P8.5) — and a balance
+        // below the service floor is refused rather than paid.
         if (silDays > 0) {
             if ((args.separation.yearsOfService ?? 0) < 1) {
                 notes.push(
