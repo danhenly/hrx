@@ -12,10 +12,12 @@ import {
     buildRf1,
     formFilename,
     renderFormCsv,
+    tableVersionLabel,
     type GovForm,
     type GovRow,
 } from "../lib/payroll/govForms";
 import { sha256Hex } from "../lib/payroll/sha256";
+import { tableInForce } from "./context";
 
 /**
  * Government schedules (P6).
@@ -40,21 +42,33 @@ function periodLabel(period: Doc<"payrollPeriods">): string {
     return `${fmt(period.startDate)} to ${fmt(period.endDate)}`;
 }
 
-/** `sss@2026-01-01` — the version string stamped on every form (D17). */
-async function tableVersion(ctx: QueryCtx | MutationCtx, kind: string): Promise<string> {
-    const rows = await ctx.db
-        .query("statutoryTables")
-        .withIndex("by_kind_effective", (q) => q.eq("kind", kind as never))
-        .collect();
-    if (rows.length === 0) return `${kind}@unseeded`;
-    const latest = rows.reduce((a, b) => (a.effectiveFrom > b.effectiveFrom ? a : b));
-    const date = new Intl.DateTimeFormat("en-CA", {
-        timeZone: "Asia/Manila",
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-    }).format(new Date(latest.effectiveFrom));
-    return `${kind}@${date}`;
+type GovTableKind = "sss" | "philhealth" | "pagibig" | "tax";
+
+/**
+ * `sss@2026-01-01` — the version string stamped on every form (D17, D19/A9).
+ *
+ * The row must be the one the RUN used, never the newest row in the table: seeding
+ * next year's schedule must not restamp a historical filing when its forms are
+ * regenerated. The run's own `payrollInputs` snapshot names the table it was priced
+ * with; a run with no snapshot falls back to the table in force at the period end —
+ * the same helper `computeRun` loads its rates from.
+ */
+async function tableVersion(
+    ctx: QueryCtx | MutationCtx,
+    kind: GovTableKind,
+    atMs: number,
+    snapshotTableId?: string,
+): Promise<string> {
+    let row: Doc<"statutoryTables"> | null = null;
+    if (snapshotTableId !== undefined) {
+        const id = ctx.db.normalizeId("statutoryTables", snapshotTableId);
+        const snapshotted = id === null ? null : await ctx.db.get(id);
+        // A snapshot naming a deleted row (or another kind) must not stamp the
+        // form — fall through to the in-force lookup instead.
+        if (snapshotted !== null && snapshotted.kind === kind) row = snapshotted;
+    }
+    if (row === null) row = await tableInForce(ctx, kind, atMs);
+    return tableVersionLabel(kind, row === null ? null : row.effectiveFrom);
 }
 
 interface LoadedForms {
@@ -87,16 +101,21 @@ export async function loadGovForms(
     const period = await ctx.db.get(run.periodId);
     if (!period) throw new ConvexError("Period not found");
 
-    const [payslips, versions] = await Promise.all([
+    const [payslips, snapshot] = await Promise.all([
         ctx.db.query("payslips").withIndex("by_run", (q) => q.eq("runId", runId)).collect(),
-        Promise.all([
-            tableVersion(ctx, "sss"),
-            tableVersion(ctx, "philhealth"),
-            tableVersion(ctx, "pagibig"),
-            tableVersion(ctx, "tax"),
-        ]),
+        // ONE snapshot is enough, and reading all of them would drag a whole run's
+        // day records through the mutation. Every payslip of a run recorded the
+        // same tables — the ones in force at the period end when it was computed.
+        ctx.db.query("payrollInputs").withIndex("by_run", (q) => q.eq("runId", runId)).first(),
     ]);
-    const [sssVersion, phVersion, hdmfVersion, taxVersion] = versions;
+    const snapshottedTables = snapshot?.tableIds;
+
+    const [sssVersion, phVersion, hdmfVersion, taxVersion] = await Promise.all([
+        tableVersion(ctx, "sss", period.endDate, snapshottedTables?.sss),
+        tableVersion(ctx, "philhealth", period.endDate, snapshottedTables?.philhealth),
+        tableVersion(ctx, "pagibig", period.endDate, snapshottedTables?.pagibig),
+        tableVersion(ctx, "tax", period.endDate, snapshottedTables?.tax),
+    ]);
 
     const lines = await ctx.db
         .query("payslipLines")

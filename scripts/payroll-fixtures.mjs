@@ -32,6 +32,9 @@ const loadSrc = (file) => import(pathToFileURL(join(root, "src", "lib", file)).h
 // Business rules that are not payroll (departments, position history) live directly
 // under convex/lib; the runner needs a second root to reach them.
 const loadLib = (file) => import(pathToFileURL(join(root, "convex", "lib", file)).href);
+// The payroll mutations' plain-async helpers live under convex/payroll; importing
+// context.ts here lets a fixture drive the REAL table-in-force selector.
+const loadPayroll = (file) => import(pathToFileURL(join(root, "convex", "payroll", file)).href);
 const [bankFilesDoc, sha256Doc] = await Promise.all([
     load("bankFiles.ts"),
     load("sha256.ts"),
@@ -56,6 +59,7 @@ const [rates, calendar, tax, engine, premiums, statutory, thirteenth, govForms, 
     loadLib("departments.ts"),
     loadLib("positionHistory.ts"),
 ]);
+const contextLib = await loadPayroll("context.ts");
 
 /** The holiday set the engine fixtures price against (a slice of DOLE LA 12-25). */
 const FIXTURE_HOLIDAYS = [
@@ -378,6 +382,25 @@ const handlers = {
             csvQuotedComma: csv.includes('"Reyes, Ana"'),
         };
     },
+    async govTableVersion(input) {
+        // Drive the REAL in-force selector with a stub reader: the scenario that
+        // matters is a 2027 schedule seeded while regenerating a 2026 run, and the
+        // stamp must still be the 2026 table.
+        const rows = (input.rows ?? []).map((row) => ({ ...row }));
+        const stubCtx = {
+            db: {
+                query: () => ({
+                    withIndex: () => ({ collect: async () => rows }),
+                }),
+            },
+        };
+        const row = await contextLib.tableInForce(stubCtx, input.kind, input.at);
+        return {
+            matched: row === null ? null : row.label,
+            version: govForms.tableVersionLabel(input.kind, row === null ? null : row.effectiveFrom),
+        };
+    },
+
     dailyRate({ terms }) {
         const result = {
             dailyCentavos: rates.dailyRateCentavos(terms),
@@ -742,7 +765,7 @@ const handlers = {
 let passed = 0;
 const failures = [];
 
-function runCase(file, fixture, testCase) {
+async function runCase(file, fixture, testCase) {
     const holidays = (fixture.holidays ?? []).map((holiday) => ({ ...holiday }));
     const handler = handlers[testCase.kind];
     if (!handler) {
@@ -753,7 +776,7 @@ function runCase(file, fixture, testCase) {
     let outcome;
     let thrown;
     try {
-        outcome = handler(testCase.input ?? {}, holidays);
+        outcome = await handler(testCase.input ?? {}, holidays);
     } catch (error) {
         thrown = error;
     }
@@ -795,7 +818,7 @@ function runCase(file, fixture, testCase) {
 for (const file of ["rates.json", "calendar.json", "premiums.json", "statutory.json", "artefacts.json", "p5.json", "p6.json", "p7.json", "p8.json", "p9.json", "p11.json", "p12.json"]) {
     const fixture = JSON.parse(readFileSync(join(fixturesDir, file), "utf8"));
     console.log(`\n${file} — ${fixture.description}`);
-    for (const testCase of fixture.cases) runCase(file, fixture, testCase);
+    for (const testCase of fixture.cases) await runCase(file, fixture, testCase);
 }
 
 const total = passed + failures.length;

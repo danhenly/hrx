@@ -48,6 +48,25 @@ export interface GovForm {
     notes: string[];
 }
 
+/**
+ * The D17 version stamp for a form: `sss@2026-01-01`, or `sss@unseeded` when no
+ * row applies.
+ *
+ * `effectiveFrom` is Manila midnight stored as UTC ms, so it is formatted in
+ * Asia/Manila — a UTC formatter reads 2026-01-01 Manila as 2025-12-31 and would
+ * stamp the previous year on the filing.
+ */
+export function tableVersionLabel(kind: string, effectiveFrom: number | null): string {
+    if (effectiveFrom === null) return `${kind}@unseeded`;
+    const date = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Manila",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+    }).format(new Date(effectiveFrom));
+    return `${kind}@${date}`;
+}
+
 const EMPTY_TOTALS: GovTotals = {
     employeeCentavos: 0,
     employerCentavos: 0,
