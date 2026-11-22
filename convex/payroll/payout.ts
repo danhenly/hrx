@@ -1,7 +1,7 @@
 import { ConvexError, v } from "convex/values";
 import { mutation, query } from "../_generated/server";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
-import type { Id } from "../_generated/dataModel";
+import type { Doc, Id } from "../_generated/dataModel";
 import { logAudit } from "../audit";
 import { requireAuth, requireMembership } from "../helpers";
 import {
@@ -20,49 +20,49 @@ import { sha256Hex } from "../lib/payroll/sha256";
  * with its SHA-256 so a re-download can be proven to be the same bytes.
  */
 
-/** The printable/payslip payload, shared by the HR view and the tokenised portal. */
-export async function loadPrintablePayslip(
-    ctx: QueryCtx,
-    payslipId: Id<"payslips">,
-) {
-    const payslip = await ctx.db.get(payslipId);
-    if (!payslip) throw new ConvexError("Payslip not found");
-    const [employee, run] = await Promise.all([
-        ctx.db.get(payslip.employeeId),
-        ctx.db.get(payslip.runId),
-    ]);
-    if (!employee || !run) throw new ConvexError("Payslip is missing its employee or run");
-    const [period, org, lines] = await Promise.all([
-        ctx.db.get(run.periodId),
-        ctx.db.get(payslip.orgId),
-        ctx.db
-            .query("payslipLines")
-            .withIndex("by_payslip", (q) => q.eq("payslipId", payslipId))
-            .collect(),
-    ]);
+/** Payslip lines in the order a printed slip shows them. */
+const LINE_ORDER: Record<string, number> = {
+    BASIC: 0,
+    RH: 1,
+    SH: 2,
+    RD: 3,
+    RH_UNWORKED: 4,
+    OT: 5,
+    ND: 6,
+    ABSENCE: 50,
+    SSS: 51,
+    PHIC: 52,
+    HDMF: 53,
+    TAX: 54,
+};
 
-    // The employee copy never shows the employer shares: D3 is explicit that they are
-    // cost, not deduction, and a payslip showing them reads as money taken from the
-    // employee. They stay on the run pack (HR copy).
-    const order: Record<string, number> = {
-        BASIC: 0,
-        RH: 1,
-        SH: 2,
-        RD: 3,
-        RH_UNWORKED: 4,
-        OT: 5,
-        ND: 6,
-        ABSENCE: 50,
-        SSS: 51,
-        PHIC: 52,
-        HDMF: 53,
-        TAX: 54,
-    };
+/**
+ * One printable sheet, assembled from documents already in memory.
+ *
+ * The employee copy never shows the employer shares: D3 is explicit that they are
+ * cost, not deduction, and a payslip showing them reads as money taken from the
+ * employee. They stay on the run pack (HR copy).
+ */
+function buildPayslipSheet({
+    payslip,
+    employee,
+    org,
+    run,
+    period,
+    lines,
+}: {
+    payslip: Doc<"payslips">;
+    employee: Doc<"employees">;
+    org: Doc<"organizations"> | null;
+    run: Doc<"payrollRuns">;
+    period: Doc<"payrollPeriods"> | null;
+    lines: Doc<"payslipLines">[];
+}) {
     const visible = lines
         .filter((line) => line.kind !== "employer_cost")
         .sort(
             (a, b) =>
-                (order[a.code] ?? 40) - (order[b.code] ?? 40) ||
+                (LINE_ORDER[a.code] ?? 40) - (LINE_ORDER[b.code] ?? 40) ||
                 a.code.localeCompare(b.code),
         );
 
@@ -77,6 +77,79 @@ export async function loadPrintablePayslip(
         lines: visible,
         memos: lines.filter((line) => line.kind === "memo"),
     };
+}
+
+/** The printable/payslip payload, shared by the HR view and the tokenised portal. */
+export async function loadPrintablePayslip(
+    ctx: QueryCtx,
+    payslipId: Id<"payslips">,
+) {
+    const payslip = await ctx.db.get(payslipId);
+    if (!payslip) throw new ConvexError("Payslip not found");
+    const [employee, run, lines] = await Promise.all([
+        ctx.db.get(payslip.employeeId),
+        ctx.db.get(payslip.runId),
+        ctx.db
+            .query("payslipLines")
+            .withIndex("by_payslip", (q) => q.eq("payslipId", payslipId))
+            .collect(),
+    ]);
+    if (!employee || !run) throw new ConvexError("Payslip is missing its employee or run");
+    const [period, org] = await Promise.all([
+        ctx.db.get(run.periodId),
+        ctx.db.get(payslip.orgId),
+    ]);
+    return buildPayslipSheet({ payslip, employee, org, run, period, lines });
+}
+
+/**
+ * Every printable sheet of a run in ONE wave of reads.
+ *
+ * `printableForRun` used to call `loadPrintablePayslip` once per payslip, six reads
+ * each — ~7,200 sequential reads to print a 1,200-head run. The run's lines,
+ * employees, org and period are now read once and the sheets assembled from maps,
+ * so the read count is the same for 1 payslip and for 1,200.
+ */
+export async function loadPrintablePayslips(
+    ctx: QueryCtx,
+    run: Doc<"payrollRuns">,
+) {
+    const [period, org, payslips, employees, lines] = await Promise.all([
+        ctx.db.get(run.periodId),
+        ctx.db.get(run.orgId),
+        ctx.db
+            .query("payslips")
+            .withIndex("by_run", (q) => q.eq("runId", run._id))
+            .collect(),
+        ctx.db
+            .query("employees")
+            .withIndex("by_org", (q) => q.eq("orgId", run.orgId))
+            .collect(),
+        ctx.db
+            .query("payslipLines")
+            .withIndex("by_run", (q) => q.eq("runId", run._id))
+            .collect(),
+    ]);
+    const employeeById = new Map(employees.map((employee) => [String(employee._id), employee]));
+    const linesByPayslip = new Map<string, Doc<"payslipLines">[]>();
+    for (const line of lines) {
+        const key = String(line.payslipId);
+        const bucket = linesByPayslip.get(key);
+        if (bucket) bucket.push(line);
+        else linesByPayslip.set(key, [line]);
+    }
+    return payslips.map((payslip) => {
+        const employee = employeeById.get(String(payslip.employeeId));
+        if (!employee) throw new ConvexError("Payslip is missing its employee or run");
+        return buildPayslipSheet({
+            payslip,
+            employee,
+            org,
+            run,
+            period,
+            lines: linesByPayslip.get(String(payslip._id)) ?? [],
+        });
+    });
 }
 
 /** HR view of one printable payslip. */
@@ -106,28 +179,63 @@ export const listArtefacts = query({
     },
 });
 
-/** Net pay per employee, joined to the bank account the money goes to. */
+/**
+ * Net pay per employee, joined to the bank account the money goes to.
+ *
+ * `preloaded` is for a caller that has already read the run's payslips and employees
+ * (the run pack needs both for its register): without it they are read again in a
+ * second full pass. The statutory ids are always read once, org-scoped — they used to
+ * be an `.unique()` per payslip, i.e. 1,200 sequential reads on a 1,200-head run.
+ */
 async function disbursementRows(
     ctx: QueryCtx,
     orgId: Id<"organizations">,
     runId: Id<"payrollRuns">,
     reference: string,
+    preloaded?: {
+        payslips?: Doc<"payslips">[];
+        employeeById?: Map<string, Doc<"employees">>;
+    },
 ) {
-    const payslips = await ctx.db
-        .query("payslips")
-        .withIndex("by_run", (q) => q.eq("runId", runId))
-        .collect();
+    const [payslips, employeeById, statutoryIdRows] = await Promise.all([
+        preloaded?.payslips
+            ? preloaded.payslips
+            : ctx.db
+                  .query("payslips")
+                  .withIndex("by_run", (q) => q.eq("runId", runId))
+                  .collect(),
+        preloaded?.employeeById
+            ? preloaded.employeeById
+            : ctx.db
+                  .query("employees")
+                  .withIndex("by_org", (q) => q.eq("orgId", orgId))
+                  .collect()
+                  .then(
+                      (employees) =>
+                          new Map(
+                              employees.map((employee) => [
+                                  String(employee._id),
+                                  employee,
+                              ]),
+                          ),
+                  ),
+        // One org-scoped read: the bank account is the only field needed, and the
+        // per-payslip `.unique()` this replaces made a 1,200-head run 1,200 reads.
+        ctx.db
+            .query("employeeStatutoryIds")
+            .withIndex("by_org_employee", (q) => q.eq("orgId", orgId))
+            .collect(),
+    ]);
+
+    const idsByEmployee = new Map(
+        statutoryIdRows.map((row) => [String(row.employeeId), row]),
+    );
 
     const rows: DisbursementRow[] = [];
     const missing: { employeeId: string; reason: string }[] = [];
     for (const payslip of payslips) {
-        const employee = await ctx.db.get(payslip.employeeId);
-        const ids = await ctx.db
-            .query("employeeStatutoryIds")
-            .withIndex("by_org_employee", (q) =>
-                q.eq("orgId", orgId).eq("employeeId", payslip.employeeId),
-            )
-            .unique();
+        const employee = employeeById.get(String(payslip.employeeId));
+        const ids = idsByEmployee.get(String(payslip.employeeId));
         const name = employee
             ? `${employee.firstName} ${employee.lastName}`.trim()
             : "(unknown)";
@@ -274,32 +382,45 @@ export async function generateRunPackCore(
             throw new ConvexError("Only an approved run has a pack");
         }
 
-        const period = await ctx.db.get(run.periodId);
-        const payslips = await ctx.db
-            .query("payslips")
-            .withIndex("by_run", (q) => q.eq("runId", runId))
-            .collect();
-
-        const registerRows = await Promise.all(
-            payslips.map(async (payslip) => {
-                const employee = await ctx.db.get(payslip.employeeId);
-                return {
-                    employeeName: employee
-                        ? `${employee.firstName} ${employee.lastName}`.trim()
-                        : "(unknown)",
-                    gross: payslip.gross,
-                    totalDeductions: payslip.totalDeductions,
-                    net: payslip.net,
-                    employerCost: payslip.employerCost,
-                };
-            }),
+        const [period, org, payslips, employees] = await Promise.all([
+            ctx.db.get(run.periodId),
+            ctx.db.get(orgId),
+            ctx.db
+                .query("payslips")
+                .withIndex("by_run", (q) => q.eq("runId", runId))
+                .collect(),
+            // The register and the bank file both name these employees; reading the
+            // org once here is what stops `disbursementRows` reading them a second time.
+            ctx.db
+                .query("employees")
+                .withIndex("by_org", (q) => q.eq("orgId", orgId))
+                .collect(),
+        ]);
+        const employeeById = new Map(
+            employees.map((employee) => [String(employee._id), employee]),
         );
+
+        const registerRows = payslips.map((payslip) => {
+            const employee = employeeById.get(String(payslip.employeeId));
+            return {
+                employeeName: employee
+                    ? `${employee.firstName} ${employee.lastName}`.trim()
+                    : "(unknown)",
+                gross: payslip.gross,
+                totalDeductions: payslip.totalDeductions,
+                net: payslip.net,
+                employerCost: payslip.employerCost,
+            };
+        });
         const registerCsv = renderRegisterCsv(
             registerRows.sort((a, b) => a.employeeName.localeCompare(b.employeeName)),
         );
 
         const reference = `RUN-${runId}-v${run.version}`;
-        const { rows, missing } = await disbursementRows(ctx, orgId, runId, reference);
+        const { rows, missing } = await disbursementRows(ctx, orgId, runId, reference, {
+            payslips,
+            employeeById,
+        });
         const generic = BANK_LAYOUTS.find((entry) => entry.id === "generic");
         const bank = generic
             ? renderBankFile({
@@ -313,7 +434,7 @@ export async function generateRunPackCore(
         const day = (ms: number) => new Date(ms + 8 * 3_600_000).toISOString().slice(0, 10);
         const header = [
             `HRX payroll run pack`,
-            `organisation: ${(await ctx.db.get(orgId))?.name ?? ""}`,
+            `organisation: ${org?.name ?? ""}`,
             `period: ${period ? `${day(period.startDate)} -> ${day(period.endDate)}` : "?"}`,
             `pay date: ${period ? day(period.payDate) : "?"}`,
             `run: v${run.version} (${run.status})`,
@@ -387,13 +508,7 @@ export const printableForRun = query({
         const run = await ctx.db.get(runId);
         if (!run) throw new ConvexError("Run not found");
         await requireMembership(ctx, userId, run.orgId);
-        const payslips = await ctx.db
-            .query("payslips")
-            .withIndex("by_run", (q) => q.eq("runId", runId))
-            .collect();
-        const sheets = await Promise.all(
-            payslips.map((payslip) => loadPrintablePayslip(ctx, payslip._id)),
-        );
+        const sheets = await loadPrintablePayslips(ctx, run);
         return sheets.sort((a, b) => a.employee.name.localeCompare(b.employee.name));
     },
 });
