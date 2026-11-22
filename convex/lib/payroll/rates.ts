@@ -71,6 +71,16 @@ export function defaultDailyRateBasis(workWeek: WorkWeek): DailyRateBasis {
     return workWeek === "5_day" ? "261" : "313";
 }
 
+/**
+ * `"22"` and `"26"` count PAID DAYS IN ONE MONTH; `"261"` and `"313"` count
+ * working days in a YEAR. D7's `× 12` belongs only to the annual pair —
+ * applying it to a monthly divisor inflates the daily rate twelvefold, which is
+ * invisible until someone checks a payslip by hand.
+ */
+export function isMonthlyDivisor(basis: DailyRateBasis): boolean {
+    return basis === "22" || basis === "26";
+}
+
 /** A position row as stored — every pay field optional on Phase 1 rows. */
 export type PositionPayFields = {
     salary?: number;            // gross ANNUAL (convex/schema.ts)
@@ -178,7 +188,11 @@ export function dailyRateExact(terms: PayTerms): number {
             return terms.basicRate * NORMAL_HOURS_PER_DAY;
         case "monthly": {
             const divisor = Number(terms.dailyRateBasis);
-            return (terms.basicRate * 12) / divisor;
+            // Annual divisor: the monthly rate annualises first. Monthly
+            // divisor: it already counts a month, so divide the rate directly.
+            return isMonthlyDivisor(terms.dailyRateBasis)
+                ? terms.basicRate / divisor
+                : (terms.basicRate * 12) / divisor;
         }
     }
 }
@@ -205,16 +219,22 @@ export function hourlyRateCentavos(terms: PayTerms): Money {
  * D15 keeps `salary` (gross annual) as the contractual figure and asserts
  * `salary === basicRate * 12` for monthly pay; daily and hourly rates use the
  * same divisor the daily rate is derived from, so a row can never carry two
- * inconsistent statements of the same pay.
+ * inconsistent statements of the same pay. A MONTHLY divisor ("22"/"26") is
+ * annualised as divisor × 12 for exactly that reason.
  */
 export function annualSalaryFor(terms: PayTerms): number {
     const divisor = Number(terms.dailyRateBasis);
+    // A monthly divisor counts paid days in ONE month, so a year of them is
+    // divisor × 12; the annual divisors already are a whole year.
+    const annualDivisor = isMonthlyDivisor(terms.dailyRateBasis)
+        ? divisor * 12
+        : divisor;
     const annual =
         terms.payType === "monthly"
             ? terms.basicRate * 12
             : terms.payType === "daily"
-              ? terms.basicRate * divisor
-              : terms.basicRate * NORMAL_HOURS_PER_DAY * divisor;
+              ? terms.basicRate * annualDivisor
+              : terms.basicRate * NORMAL_HOURS_PER_DAY * annualDivisor;
     return roundHalfUp(annual * 100) / 100;
 }
 
@@ -231,6 +251,12 @@ export function rateDerivation(terms: PayTerms): string {
             `PHP ${terms.basicRate.toFixed(2)}/hour × ` +
             `${NORMAL_HOURS_PER_DAY} hours = ` +
             `PHP ${dailyRateExact(terms).toFixed(2)}/day`
+        );
+    }
+    if (isMonthlyDivisor(terms.dailyRateBasis)) {
+        return (
+            `PHP ${terms.basicRate.toFixed(2)}/month ÷ ` +
+            `${terms.dailyRateBasis} = PHP ${dailyRateExact(terms).toFixed(2)}/day`
         );
     }
     return (
