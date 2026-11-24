@@ -56,6 +56,9 @@ jobs:
       - name: Payroll fixtures
         run: node --no-warnings --experimental-strip-types scripts/payroll-fixtures.mjs
 
+      - name: Convex mutation tests
+        run: pnpm exec vitest run
+
       - name: Convex generated code is fresh
         env:
           CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
